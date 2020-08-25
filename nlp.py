@@ -5,8 +5,10 @@ import pandas as pd
 from time import time
 from concurrent.futures import ThreadPoolExecutor
 from scipy.optimize import curve_fit
-with open("corpus/lotr_en.txt") as f:
-    file=f.read()
+from memory_profiler import profile
+import sys
+#with open("corpus/lotr_en.txt") as f:
+#    file=f.read()
 
 #print(file)
 from string import punctuation
@@ -19,7 +21,7 @@ def remove_punctuation(data):
         else:
             temp.append(i.lower())
     return "".join(temp)
-data=remove_punctuation(file)
+#data=remove_punctuation(file)
 #print(data.split())
 
 
@@ -53,9 +55,10 @@ def make_dataframe(model,fmin):
         data["ngram"].append(ngram)
         data["F_i"][i]=model[ngram].F_i
     return pd.DataFrame(data=data)
-L=0#
-V=0#
+#L=0#
+#V=0#
 def make_markov_chain(data,order=1,split='word'):
+    global model,L,V
     model=dict()
 
     if split=="symbol":
@@ -64,7 +67,6 @@ def make_markov_chain(data,order=1,split='word'):
             for symbol in word:
                 temp.append(symbol)
         data=temp
-    global L
     L=len(data)-order
     if order>1:
         for i in range(L):
@@ -92,44 +94,7 @@ def make_markov_chain(data,order=1,split='word'):
                  model[data[i]].pos.append(i+1)
                  model[data[i]].bool=np.zeros(len(data)-order)
                  model[data[i]].bool[i]=1
-    global V
     V=len(model)
-    return model
-start=time()
-fmin=100
-order=2
-split="word"
-model=make_markov_chain(data.split(),order=order,split=split)
-
-#model
-df=make_dataframe(model,fmin)
-print("chain time:",time()-start)
-#print(df)
-
-### CALCULATE FA ###
-
-print("order:",order)
-print("split by:",split)
-print("L:",L)
-print("V: ",V)
-print("fmin:",fmin)
-print("valid V:",len(df['ngram']))
-print()
-wmax=int(L/20)
-w=int(wmax/10)
-we=1000
-wh=w
-print("w:",w)
-print("wmax:",wmax)
-print("we:",we)
-print("wh:",wh)
-#model['entropy'].bool
-
-
-
-start=time()
-temp_w=0
-
 
 #print(df["ngram"])
 @jit(nopython=True)
@@ -153,41 +118,16 @@ def R(x):
 def fa(x,args):
     #print(w)
     wi,wsh,l=args
-
+    #print(wi,wsh,l)
     count=np.empty(len(range(wi,l,wsh)),dtype=np.uint8)
 
-    for index,i in enumerate(range(0,l-wi,wh)):
+    for index,i in enumerate(range(0,l-wi,wsh)):
         count[index]=s(x[i:i+wi])
 
     return count,mse(count)
-windows=list(range(w,wmax,we))
-fa(np.zeros(5),(1,2,3))
-
-def func(wind):
-    model[ngram].counts[wind],model[ngram].fa[wind]=fa(model[ngram].bool,(wind,wh,L))
-
-for index,ngram in enumerate(df['ngram']):
-    print(str(index)+" of "+str(len(df['ngram'])),end="\r")
-    with ThreadPoolExecutor() as e:
-        e.map(func,windows)
 @jit(nopython=True)
 def fit(x,a,b):
     return a*x**b
-temp_b=[]
-temp_fi=[]
-temp_R=[]
-for ngram in df['ngram']:
-    c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],maxfev=5000)
-    model[ngram].a=c[0]
-    model[ngram].b=c[1]
-    temp_b.append(c[1])
-    temp_fi.append(model[ngram].F_i/L)
-    temp_R.append(R(np.array(model[ngram].pos)))
-df['R']=temp_R
-df['f_i']=temp_fi
-df['alpha']=temp_b
-
-
 
 
 
@@ -213,7 +153,121 @@ with ThreadPoolExecutor() as e:
     windows=list(range(w,wmax,we))
     e.map(first_pool,windows)
 """
+def calculate_fa(df,model,*args):
+    fa(np.zeros(5),(1,2,3))
+    w,wmax,we,wh,L=args
+    def func(window):
+        model[ngram].counts[window],model[ngram].fa[window]=fa(model[ngram].bool,(window,wh,L))
+    for index,ngram in enumerate(df['ngram']):
+        print(str(index)+" of "+str(len(df['ngram'])),end="\r")
+        with ThreadPoolExecutor() as e:
+            wi=list(range(w,wmax,we))
+            e.map(func,wi)
 
 
-print("fa time:",time()-start)
-print(df)
+    pass
+
+#print("fa time:",time()-start)
+#print(df)
+L,V=0,0
+wh=0
+model=0
+ngram=0
+@profile
+def main():
+    global L,V,wh,model,ngram
+    with open("corpus/lotr_en.txt") as f:
+        file=f.read()
+    data=remove_punctuation(file)
+    start=time()
+    fmin=100
+    order=2
+    split="word"
+    make_markov_chain(data.split(),order=order,split=split)
+
+    #model
+    df=make_dataframe(model,fmin)
+    print("chain time:",time()-start)
+    #print(df)
+
+    ### CALCULATE FA ###
+
+    print("order:",order)
+    print("split by:",split)
+    print("L:",L)
+    print("V: ",V)
+    print("fmin:",fmin)
+    print("valid V:",len(df['ngram']))
+    print()
+    wmax=int(L/20)
+    w=int(wmax/10)
+    we=int(wmax/10)
+    wh=w
+    print("w:",w)
+    print("wmax:",wmax)
+    print("we:",we)
+    print("wh:",wh)
+    #model['entropy'].bool
+
+
+
+    start=time()
+    temp_w=0
+#    g()
+ #   input()
+
+    calculate_fa(df,model,w,wmax,we,wh,L)
+    temp_b=[]
+    temp_fi=[]
+    temp_R=[]
+    print(df)
+    print()
+    #for ngram in model:
+        #print(model[ngram].fa)
+
+
+
+    for ngram in df['ngram']:
+        c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],maxfev=5000)
+        model[ngram].a=c[0]
+        model[ngram].b=c[1]
+        temp_b.append(c[1])
+        temp_fi.append(model[ngram].F_i/L)
+        temp_R.append(R(np.array(model[ngram].pos)))
+    df['R']=temp_R
+    df['f_i']=temp_fi
+    df['alpha']=temp_b
+    print(df)
+
+
+
+    pass
+if __name__=="__main__":
+    main()
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
