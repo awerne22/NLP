@@ -74,34 +74,36 @@ def make_markov_chain(data,order=1,split='word'):
             if window in model: # Приєднуємо до вже існуючого розподілу
                  model[window].update ([data[i+order]])
                  model[window].pos.append(i+1)
-                 model[window].bool[i]=1
+                 model[window].bool.append(i)
 
             else:
                  model[window] = Ngram ([data[i+order]])
                  model[window].pos=[]
                  model[window].pos.append(i+i)
-                 model[window].bool=np.zeros(len(data)-order)
-                 model[window].bool[i]=1
+                 model[window].bool=[]#np.zeros(len(data)-order)
+                 model[window].bool.append(i)
     else:
         for i in range(L):
             if data[i] in model: # Приєднуємо до вже існуючого розподілу
                  model[data[i]].update ([data[i+order]])
                  model[data[i]].pos.append(i+order)
-                 model[data[i]].bool[i]=1
+                 model[data[i]].bool.append(i)
             else:
                  model[data[i]] = Ngram ([data[i+order]])
                  model[data[i]].pos=[]
                  model[data[i]].pos.append(i+1)
-                 model[data[i]].bool=np.zeros(len(data)-order)
-                 model[data[i]].bool[i]=1
+                 model[data[i]].bool=[]#np.zeros(len(data)-order)
+                 model[data[i]].bool.append(i)
     V=len(model)
 
 #print(df["ngram"])
 @jit(nopython=True)
-def s(window):
+def s(*args):
+    indexes,w,wm=args
     suma=0
-    for i in range(len(window)):
-        suma+=window[i]
+    for index in indexes:
+        if index >=w and index <=wm:
+            suma+=1
     return suma
 @jit(nopython=True)
 def mse(x):
@@ -120,9 +122,8 @@ def fa(x,args):
     wi,wsh,l=args
     #print(wi,wsh,l)
     count=np.empty(len(range(wi,l,wsh)),dtype=np.uint8)
-
     for index,i in enumerate(range(0,l-wi,wsh)):
-        count[index]=s(x[i:i+wi])
+        count[index]=s(x,i,i+wi)
 
     return count,mse(count)
 @jit(nopython=True)
@@ -157,7 +158,7 @@ def calculate_fa(df,model,*args):
     fa(np.zeros(5),(1,2,3))
     w,wmax,we,wh,L=args
     def func(window):
-        model[ngram].counts[window],model[ngram].fa[window]=fa(model[ngram].bool,(window,wh,L))
+        model[ngram].counts[window],model[ngram].fa[window]=fa(np.array(model[ngram].bool),(window,wh,L))
     for index,ngram in enumerate(df['ngram']):
         print(str(index)+" of "+str(len(df['ngram'])),end="\r")
         with ThreadPoolExecutor() as e:
@@ -180,9 +181,9 @@ def main():
         file=f.read()
     data=remove_punctuation(file)
     start=time()
-    fmin=100
-    order=2
-    split="word"
+    fmin=15
+    order=6
+    split="symbol"
     make_markov_chain(data.split(),order=order,split=split)
 
     #model
