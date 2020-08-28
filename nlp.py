@@ -113,6 +113,8 @@ def calculate_distance(positions,L,option):
 @jit(nopython=True)
 def nbc(positions):
     number_of_pos=len(positions)
+    if number_of_pos ==1:
+        return positions
     dt=np.empty(number_of_pos-1,dtype=np.uint8)
     for i in range(number_of_pos-1):
         dt[i]=positions[i+1]-positions[i]
@@ -136,7 +138,7 @@ def pbc(positions,L):
         dt[i]=positions[i+1]-positions[i]
     dt[-1]=L-positions[-1]+L+positions[0]
     return dt
-pos=np.array([5,6,9])
+pos=np.array([5],dtype=np.uint8)
 
 
 L=15
