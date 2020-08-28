@@ -57,6 +57,7 @@ def make_dataframe(model,fmin):
     return pd.DataFrame(data=data)
 #L=0#
 #V=0#
+
 def make_markov_chain(data,order=1,split='word'):
     global model,L,V
     model=dict()
@@ -73,29 +74,81 @@ def make_markov_chain(data,order=1,split='word'):
             window = tuple (data[i: i+order])  # Додаємо в словник
             if window in model: # Приєднуємо до вже існуючого розподілу
                  model[window].update ([data[i+order]])
-                 model[window].pos.append(i+1)
-                 model[window].bool.append(i)
+                 model[window].pos.append(i)
+                 #model[window].bool.append(i)
 
             else:
                  model[window] = Ngram ([data[i+order]])
                  model[window].pos=[]
-                 model[window].pos.append(i+i)
-                 model[window].bool=[]#np.zeros(len(data)-order)
-                 model[window].bool.append(i)
+                 model[window].pos.append(i)
+
+                 #model[window].bool=[]#np.zeros(len(data)-order)
+                 #model[window].bool.append(i)
     else:
         for i in range(L):
             if data[i] in model: # Приєднуємо до вже існуючого розподілу
                  model[data[i]].update ([data[i+order]])
-                 model[data[i]].pos.append(i+order)
-                 model[data[i]].bool.append(i)
+                 model[data[i]].pos.append(i)
+                 #model[data[i]].bool.append(i)
             else:
                  model[data[i]] = Ngram ([data[i+order]])
                  model[data[i]].pos=[]
-                 model[data[i]].pos.append(i+1)
-                 model[data[i]].bool=[]#np.zeros(len(data)-order)
-                 model[data[i]].bool.append(i)
+                 model[data[i]].pos.append(i)
+                 #model[data[i]].bool=[]#np.zeros(len(data)-order)
+                 #model[data[i]].bool.append(i)
     V=len(model)
 
+
+
+#@jit(nopython=True)
+def calculate_distance(positions,L,option):
+    if option=="nbc":
+        return nbc(positions)
+    if option=="obc":
+        return obc(positions,L)
+    if option=="pbc":
+        return pbc(positions,L)
+
+
+@jit(nopython=True)
+def nbc(positions):
+    number_of_pos=len(positions)
+    dt=np.empty(number_of_pos-1,dtype=np.uint8)
+    for i in range(number_of_pos-1):
+        dt[i]=positions[i+1]-positions[i]
+    return dt
+
+@jit(nopython=True)
+def obc(positions,L):
+    number_of_pos=len(positions)
+    dt=np.empty(number_of_pos+1,dtype=np.uint8)
+    dt[0]=positions[0]
+    for i in range(number_of_pos-1):
+        dt[i+1]=positions[i+1]-positions[i]
+    dt[-1]=L-positions[-1]
+    return dt
+
+@jit(nopython=True)
+def pbc(positions,L):
+    number_of_pos=len(positions)
+    dt=np.empty(number_of_pos,dtype=np.uint8)
+    for i in range(number_of_pos-1):
+        dt[i]=positions[i+1]-positions[i]
+    dt[-1]=L-positions[-1]+L+positions[0]
+    return dt
+pos=np.array([5,6,9])
+
+
+L=15
+
+nbc=calculate_distance(pos,L,option="nbc")
+print(pos)
+print(nbc)
+obc=calculate_distance(pos,L,option="obc")
+print(obc)
+pbc=calculate_distance(pos,L,option="pbc")
+print(pbc)
+input()
 #print(df["ngram"])
 @jit(nopython=True)
 def s(*args):
@@ -104,6 +157,8 @@ def s(*args):
     for index in indexes:
         if index >=w and index <=wm:
             suma+=1
+        if index >wm:
+            return suma
     return suma
 @jit(nopython=True)
 def mse(x):
@@ -119,10 +174,10 @@ def R(x):
 @jit(nopython=True)
 def fa(x,args):
     #print(w)
-    wi,wsh,l=args
+    wi,whi,l=args
     #print(wi,wsh,l)
-    count=np.empty(len(range(wi,l,wsh)),dtype=np.uint8)
-    for index,i in enumerate(range(0,l-wi,wsh)):
+    count=np.empty(len(range(wi,l,whi)),dtype=np.uint8)
+    for index,i in enumerate(range(0,l-wi,whi)):
         count[index]=s(x,i,i+wi)
 
     return count,mse(count)
@@ -158,7 +213,7 @@ def calculate_fa(df,model,*args):
     fa(np.zeros(5),(1,2,3))
     w,wmax,we,wh,L=args
     def func(window):
-        model[ngram].counts[window],model[ngram].fa[window]=fa(np.array(model[ngram].bool),(window,wh,L))
+        model[ngram].counts[window],model[ngram].fa[window]=fa(np.array(model[ngram].pos),(window,wh,L))
     for index,ngram in enumerate(df['ngram']):
         print(str(index)+" of "+str(len(df['ngram'])),end="\r")
         with ThreadPoolExecutor() as e:
