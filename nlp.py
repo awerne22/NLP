@@ -138,19 +138,7 @@ def pbc(positions,L):
         dt[i]=positions[i+1]-positions[i]
     dt[-1]=L-positions[-1]+L+positions[0]
     return dt
-pos=np.array([5],dtype=np.uint8)
 
-
-L=15
-
-nbc=calculate_distance(pos,L,option="nbc")
-print(pos)
-print(nbc)
-obc=calculate_distance(pos,L,option="obc")
-print(obc)
-pbc=calculate_distance(pos,L,option="pbc")
-print(pbc)
-input()
 #print(df["ngram"])
 @jit(nopython=True)
 def s(*args):
@@ -212,10 +200,11 @@ with ThreadPoolExecutor() as e:
     e.map(first_pool,windows)
 """
 def calculate_fa(df,model,*args):
-    fa(np.zeros(5),(1,2,3))
-    w,wmax,we,wh,L=args
+    fa(np.array([1,2],dtype=np.uint8),(1,2,3))
+    w,wmax,we,wh,L,opt=args
     def func(window):
-        model[ngram].counts[window],model[ngram].fa[window]=fa(np.array(model[ngram].pos),(window,wh,L))
+        dt=calculate_distance(np.array(model[ngram].pos,dtype=np.uint8),L,opt)
+        model[ngram].counts[window],model[ngram].fa[window]=fa(dt,(window,wh,L))
     for index,ngram in enumerate(df['ngram']):
         print(str(index)+" of "+str(len(df['ngram'])),end="\r")
         with ThreadPoolExecutor() as e:
@@ -235,12 +224,13 @@ ngram=0
 def main():
     global L,V,wh,model,ngram
     with open("corpus/lotr_en.txt") as f:
-        file=f.read()
+        file=f.read(2000)
     data=remove_punctuation(file)
     start=time()
-    fmin=15
-    order=6
-    split="symbol"
+    fmin=4
+    order=1
+    split="word"
+    option="nbc"
     make_markov_chain(data.split(),order=order,split=split)
 
     #model
@@ -274,7 +264,7 @@ def main():
 #    g()
  #   input()
 
-    calculate_fa(df,model,w,wmax,we,wh,L)
+    calculate_fa(df,model,w,wmax,we,wh,L,option)
     temp_b=[]
     temp_fi=[]
     temp_R=[]
