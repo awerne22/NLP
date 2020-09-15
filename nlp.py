@@ -289,11 +289,16 @@ import dash_core_components as dcc
 import dash_html_components as html
 import dash_table as dt
 from os import listdir
+
+#external_stylesheets = ['stylesheets.css']
+
+
 app =dash.Dash(__name__)
+
 corpus=listdir("corpus/")
 colors={
-    "background":"#111111",
-    "text":"#7fdbff"}
+    "background":"#a1a1a1",
+    "text":"#a1a1a1"}
 
 app.layout=html.Div(style={"backgroundColor":colors["background"]},
                     children=[html.Div(style={"backgroundColor":colors["text"],
@@ -367,8 +372,9 @@ def update_table(corpus,n_size,split,options,fmin):
     print(options)
     print(fmin)
     if corpus is None:
-        print(1)
         pass
+    else:
+
     #global L,V,wh,model,ngram
     #with open("corpus/"+corpus) as f:
     #    file=f.read()
@@ -389,9 +395,14 @@ def update_table(corpus,n_size,split,options,fmin):
     #print(df)
     #return df.to_dict(),[{"name":i,"id":i}for i in df.columns]
     ### CALCULATE FA ###
-    pass
+        pass
+import webbrowser
 if __name__=="__main__":
+    webbrowser.open("http://127.0.0.1:8050/")
+
     app.run_server(debug=True)
+
+    #webbrowser.open("http://127.0.0.1:8050/")
     #main()
 
 
