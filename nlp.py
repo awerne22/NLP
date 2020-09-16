@@ -300,81 +300,92 @@ colors={
     "background":"#a1a1a1",
     "text":"#a1a1a1"}
 
-app.layout=html.Div(style={"backgroundColor":colors["background"]},
-                    children=[html.Div(style={"backgroundColor":colors["text"],
-                                                "widht":"20%",
-                                              "float":"left",
-                                              "text-align":"center",
-                                              "padding":"1%"},
-                              children=[
-                                        html.Div(children=[html.Label("Choose corpus"),
-                                        dcc.Dropdown(
-                                            id="corpus",
-                                            options=[{"label":i,"value":i} for i in corpus],
-                                        )],style={"width":"90%",
-                                                  "margin-right":"5%",
-                                                  "margin-left":"5%"}),
-                                        html.Div(children=[
-                                        html.Label("size of ngram"),
-                                        dcc.Slider(
-                                            id="n-size",
-                                            min=1,
-                                            max=7,
-                                            marks={i:"{}".format(i)for i in range(1,8)},
-                                            value=1)],style={"width":"80%",
-                                                             "margin-left":"10%",
-                                                             "margin-right":"10%"}),
-                                        html.Div(children=[
-                                        html.Label("split by"),
-                                        dcc.Dropdown(
-                                            id="split",
-                                            options=[{"label":i,"value":i} for i in ["word","symbol"]],
-                                            value="word")],style={"width":"60%",
-                                                                  "margin-left":"20%",
-                                                                  "margin-right":"20%"}),
-                                        html.Div(children=[
-                                         html.Label("Boundary Condition"),
-                                        dcc.Dropdown(
-                                            id="options",
-                                            options=[{"label":i,"value":i} for i in ["no","periodic","ordinary"]],
-                                            value="no")],style={"width":"60%",
-                                                                "margin-left":"20%",
-                                                                "margin-right":"20%"}),
-                                        html.Div(children=[
-                                        html.Label("freauency of ngram"),
-                                        dcc.Input(
-                                            id="fmin",
-                                            style={"padding":"5%","width":"50%"},
-                                            placeholder="filter",
-                                            type='number',
-                                            debounce=True,
-                                            value="")],style={"width":'60%',
-                                                            "margin-left":"19%",
-                                                             "margin-right":"19%"})
+import dash_bootstrap_components as dbc
+app.layout=html.Div([
+                dbc.Row(
+                    dbc.Col(#width={"size":4,"ofsset":0},
+                            html.H4("Choose corpus:"),
+                            width={"size":4,"ofsset":0}
 
-                                        ]),
-                              html.Div(style={"float":"right","width":"75%"},
-                                       children=[dt.DataTable(
-                                       id='table',
-                                           columns=[{"name":i,"id":i}for i in ["ngram","F_i","f_i","R","alpha"]],
-                                       data=[])])])
+                        )
+
+                        )])
+
+#app.layout=html.Div(style={"backgroundColor":colors["background"]},
+#                    children=[html.Div(style={"backgroundColor":colors["text"],
+#                                                "widht":"20%",
+#                                              "float":"left",
+#                                              "text-align":"center",
+#                                              "padding":"1%"},
+#                              children=[
+#                                        html.Div(children=[html.Label("Choose corpus"),
+#                                        dcc.Dropdown(
+#                                            id="corpus",
+#                                            options=[{"label":i,"value":i} for i in corpus],
+#                                        )],style={"width":"90%",
+#                                                  "margin-right":"5%",
+#                                                  "margin-left":"5%"}),
+#                                        html.Div(children=[
+#                                        html.Label("size of ngram"),
+#                                        dcc.Slider(
+#                                            id="n-size",
+#                                            min=1,
+#                                            max=7,
+#                                            marks={i:"{}".format(i)for i in range(1,8)},
+#                                            value=1)],style={"width":"80%",
+#                                                             "margin-left":"10%",
+#                                                             "margin-right":"10%"}),
+#                                        html.Div(children=[
+#                                        html.Label("split by"),
+#                                        dcc.Dropdown(
+#                                            id="split",
+#                                            options=[{"label":i,"value":i} for i in ["word","symbol"]],
+#                                            value="word")],style={"width":"60%",
+#                                                                  "margin-left":"20%",
+#                                                                  "margin-right":"20%"}),
+#                                        html.Div(children=[
+#                                         html.Label("Boundary Condition"),
+#                                        dcc.Dropdown(
+#                                            id="options",
+#                                            options=[{"label":i,"value":i} for i in ["no","periodic","ordinary"]],
+#                                            value="no")],style={"width":"60%",
+#                                                                "margin-left":"20%",
+#                                                                "margin-right":"20%"}),
+#                                        html.Div(children=[
+#                                        html.Label("freauency of ngram"),
+#                                        dcc.Input(
+#                                            id="fmin",
+#                                            style={"padding":"5%","width":"50%"},
+#                                            placeholder="filter",
+#                                            type='number',
+#                                            debounce=True,
+#                                            value="")],style={"width":'60%',
+#                                                            "margin-left":"19%",
+#                                                             "margin-right":"19%"})
+#
+#                                        ]),
+#                              html.Div(style={"float":"right","width":"75%"},
+#                                       children=[dt.DataTable(
+#                                       id='table',
+#                                           columns=[{"name":i,"id":i}for i in ["ngram","F_i","f_i","R","alpha"]],
+#                                       data=[])])])
 from dash.dependencies import Input,Output,State
-@app.callback(Output("table","data"),
-              [Input("corpus","value"),
-               Input("n-size","value"),
-               Input("split","value"),
-               Input("options","value"),
-               Input("fmin","value")])
-def update_table(corpus,n_size,split,options,fmin):
-    print(corpus)
-    print(n_size)
-    print(split)
-    print(options)
-    print(fmin)
-    if corpus is None:
-        pass
-    else:
-
+#@app.callback(Output("table","data"),
+#              [Input("corpus","value"),
+#               Input("n-size","value"),
+#               Input("split","value"),
+#               Input("options","value"),
+#               Input("fmin","value")])
+#def update_table(corpus,n_size,split,options,fmin):
+#    print(corpus)
+#    print(n_size)
+#    print(split)
+#    print(options)
+#    print(fmin)
+#    if corpus is None:
+#        pass
+#    else:
+#
     #global L,V,wh,model,ngram
     #with open("corpus/"+corpus) as f:
     #    file=f.read()
@@ -395,7 +406,7 @@ def update_table(corpus,n_size,split,options,fmin):
     #print(df)
     #return df.to_dict(),[{"name":i,"id":i}for i in df.columns]
     ### CALCULATE FA ###
-        pass
+ #       pass
 import webbrowser
 if __name__=="__main__":
     webbrowser.open("http://127.0.0.1:8050/")
