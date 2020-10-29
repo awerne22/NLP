@@ -36,21 +36,15 @@ class Ngram (dict):
         plt.bar(self.keys(),self.values())
         plt.show()
 
-def make_dataframe(model,L,fmin=0):
-
-    #filtred_data=list(filter(lambda x:model[x].F_i >=fmin,model))
+def make_dataframe(model,fmin):
+    filtred_data=list(filter(lambda x:model[x].F_i >=fmin,model))
     data={"ngram":[],
-          "F_i":np.empty(len(model),dtype=np.dtype(int)),
-           "f_i":np.empty(len(model),dtype=np.dtype(float))}
+          "F_i":np.empty(len(filtred_data),dtype=np.dtype(int))}
 
     #print(data['ngram'][0])
-    for i,ngram in enumerate(model):
-        if ngram.__class__ is tuple:
-            data["ngram"].append("  ".join(ngram))
-        else:
-            data["ngram"].append(ngram)
+    for i,ngram in enumerate(filtred_data):
+        data["ngram"].append(ngram)
         data["F_i"][i]=model[ngram].F_i
-        data["f_i"][i]=round(model[ngram].F_i/L,7)
     return pd.DataFrame(data=data)
 #L=0#
 #V=0#
@@ -296,10 +290,12 @@ import dash_html_components as html
 import dash_table as dt
 from os import listdir
 
+#external_stylesheets = ['stylesheets.css']
+
 
 app =dash.Dash(__name__)
 
-corpuses=listdir("corpus/")
+corpus=listdir("corpus/")
 colors={
     "background":"#a1a1a1",
     "text":"#a1a1a1"}
@@ -307,153 +303,14 @@ colors={
 import dash_bootstrap_components as dbc
 app.layout=html.Div([
                 dbc.Row(
-                    [
-                    dbc.Col(
-                        dbc.Card(
-                            [
-                                dbc.CardHeader("Configuration:"),
-                                dbc.CardBody(
-                                [
-                                    html.H6("Choose corpus:"),
-                                    dcc.Dropdown(id="corpus",options=[{"label":i,"value":i}for i in corpuses]),
-                                    html.H6("Size of ngram:"),
-                                    dcc.Slider(id="n_size",min=1,max=9,value=1,marks={i:"{}".format(i)for i in range(1,10)}),
-                                    html.H6("Split by:"),
-                                    dcc.RadioItems(id='split',options=[{"label":"symbol","value":"symbol"},{"label":"word","value":"word"}],value="word"),
-                                    dbc.Button("Make Markov chain", id="chain_button",color="primary",block=True),
-                                    html.Div(id="alert",children=[])
+                    dbc.Col(#width={"size":4,"ofsset":0},
+                            html.H4("Choose corpus:"),
+                            width={"size":4,"ofsset":0}
 
-                                    #html.H6("Boundary Condition:"),
-                                    #dcc.RadioItems(id='condition',options=[{"label":"no","value":"no"},{"label":"periodic","value":"periodic"},{"label":"ordinary","value":"ordinary"}],value="words"),
-                                ]
+                        )
 
-
-                                            ),
-                                dbc.CardHeader("Characteristics"),
-                                dbc.CardBody(
-                                    [
-                                        html.Div(id="lenght",children=["Lenght: ",]),
-                                        html.Div(id="vocabulary",children=["Vocabulary: ",]),
-                                        html.Div(id="chain_time",children=["Time: ",])
-
-
-                                    ]
-                                            )
-
-                            ],color="light",style={"margin-left":"10px","margin-top":"10px",}
-                                ),
-                        width={"size":3,"offset":0}
-                            ),
-                    dbc.Col(
-                            dbc.Card(
-                                    dt.DataTable(id='table',
-                                                columns=[{"name":i,"id":i}for i in ["ngram","F_i","f_i","R","Ω"]],
-
-                                                style_data={'whiteSpace': 'normal','height': 'auto'},
-                                                 editable=False,
-                                                 filter_action="native",
-                                                 sort_action="native",
-                                                 #page_size=10,
-                                                                   #fixed_rows={'headers': True},
-                                                 style_cell={'whiteSpace': 'normal','height': 'auto','textAlign': 'right',},
-                                                             #'minWidth': 40, 'width': 95, 'maxWidth': 95},
-                                                 style_table={'height': 350, 'overflowY': 'auto',"overflowX":"none"}
-                                                )
-                                ,style={"padding":"5%","margin-top":"10px"}),
-                        width={"size":6}
-                            ),
-                    dbc.Col(
-                            dbc.Card(
-                                    [
-                                    dbc.CardHeader("Sliding window:"),
-                                    dbc.CardBody(
-                                                [
-                                                html.H6("Size of windows"),
-                                                dbc.Input(id="w"),
-                                                html.H6("Windows shift"),
-                                                dbc.Input(id="wh"),
-                                                html.H6("Windows exspansion"),
-                                                dbc.Input(id="we"),
-                                                html.H6("Max size of window"),
-                                                dbc.Input(id="wm"),
-                                                html.Br(),
-                                                dbc.Button("Fluctuation analyze",id="fa",block=True),
-                                                #html.Div(id="fa-time",children=["Time: ",])
-                                                ]
-                                                ),
-                                    dbc.CardHeader("Characteristics"),
-                                    dbc.CardBody(
-                                                html.Div(id="fa-time",children=["Time: ",])
-                                                )
-                                    ],style={"margin-top":10,"margin-right":10}
-                                    ),
-                            width={"size":3}
-                            )
-                    ]
                         )])
-from dash.dependencies import Input,Output,State
 
-@app.callback([Output("table","data"),Output("alert","children"),Output("lenght","children"),Output("vocabulary","children"),Output("chain_time","children")],
-              [Input("chain_button","n_clicks"),Input("fa","n_clicks")],
-              [State("corpus","value"),
-               State("n_size","value"),
-               State("split","value"),
-               State("table","page_current"),
-               State("w","value"),
-               State("wh","value"),
-               State("we","value"),
-               State("wm","value")])
-def update_table(n,m,corpus,n_size,split,table_state,w,wh,we,wm):
-    print(n)
-    #print(table_state)
-    print(m)
-    if m is not None and table_state is not None:
-        print("fa")
-        print(table_state)
-
-
-    #print(corpus)
-    #print(n_size)
-    #print(split)
-
-    if n is None:
-        return dash.no_update,dash.no_update,dash.no_update,dash.no_update,dash.no_update
-
-    #add alert corpus if not selected
-    if corpus is None :
-        return dash.no_update,dbc.Alert("Please choose corpus",color="danger",duration=2000,dismissable=False),dash.no_update,dash.no_update,dash.no_update
-
-    print()
-    ###  MAKE MARKOV CHAIN ####
-    global L,V,model,ngram
-    if n>1:
-        del model
-    with open("corpus/"+corpus) as f:
-        file=f.read()
-    #return [{"name":i,"id":i}for i in ["ngram","fmin"]]
-    data=remove_punctuation(file)
-    start=time()
-    #fmin=4
-    #order=1
-    #split="word"
-    #option="obc"
-    make_markov_chain(data.split(),order=n_size,split=split)
-    #print()
-    #model
-    print(V)
-    print(L)
-    df=make_dataframe(model,L)
-    #return [{"name":i,"id":i}for i in df.columns]
-    print("chain time:",time()-start)
-    #print(df.to_dict("records"))
-    #print(df)
-    return [df.to_dict("records"),dash.no_update,["Lenght: ",L],["Vocabulary: ",V],["Time: ",round(time()-start,6)]]
-
-#@app.callback([Output("table","data")],
-#              [Input("wh","value")])
-#def add_fa_analyze(wh):
-#    return dash.no_update
-    #return df,dash.no_update
 #app.layout=html.Div(style={"backgroundColor":colors["background"]},
 #                    children=[html.Div(style={"backgroundColor":colors["text"],
 #                                                "widht":"20%",
@@ -512,7 +369,7 @@ def update_table(n,m,corpus,n_size,split,table_state,w,wh,we,wm):
 #                                       id='table',
 #                                           columns=[{"name":i,"id":i}for i in ["ngram","F_i","f_i","R","alpha"]],
 #                                       data=[])])])
-#from dash.dependencies import Input,Output,State
+from dash.dependencies import Input,Output,State
 #@app.callback(Output("table","data"),
 #              [Input("corpus","value"),
 #               Input("n-size","value"),
