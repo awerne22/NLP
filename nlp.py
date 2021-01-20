@@ -14,6 +14,12 @@ def remove_punctuation(data):
 #data=remove_punctuation(file)
 #print(data.split())
 
+ 
+
+
+
+
+
 
 
 
@@ -305,7 +311,11 @@ colors={
     "text":"#a1a1a1"}
 
 import dash_bootstrap_components as dbc
-app.layout=html.Div([
+layout2=html.Div()
+app.layout=layout2
+# old layout was fun but uselse 
+#
+layout1=html.Div([
                 dbc.Row(
                     [
                     dbc.Col(
