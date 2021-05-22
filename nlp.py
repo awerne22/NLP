@@ -230,8 +230,9 @@ with ThreadPoolExecutor() as e:
     windows=list(range(w,wmax,we))
     e.map(first_pool,windows)
 """
-def func(wind):
-    model[ngram].counts[wind],model[ngram].fa[wind]=fa(model[ngram].bool,(wind,wh,L))
+####tyt hyinya### 
+def func(wind,model,wh,l):
+    model[ngram].counts[wind],model[ngram].fa[wind]=fa(model[ngram].bool,(wind,wh,l))
 
 def calculate_fa(df,model,*args):
     fa(np.array([1,2],dtype=np.uint8),(1,2,3))
@@ -250,82 +251,83 @@ def calculate_fa(df,model,*args):
 
 #print("fa time:",time()-start)
 #print(df)
-L,V=0,0
-wh=0
-model=0
-ngram=0
-@profile
-def main():
-    global L,V,wh,model,ngram
-    with open("corpus/lotr_en.txt") as f:
-        file=f.read()
-    data=remove_punctuation(file)
-    start=time()
-    fmin=4
-    order=1
-    split="word"
-    option="obc"
-    make_markov_chain(data.split(),order=order,split=split)
-
-    #model
-    df=make_dataframe(model,fmin)
-    print("chain time:",time()-start)
-    #print(df)
-
-    ### CALCULATE FA ###
-
-    print("order:",order)
-    print("split by:",split)
-    print("L:",L)
-    print("V: ",V)
-    print("fmin:",fmin)
-    print("valid V:",len(df['ngram']))
-    print()
-    wmax=int(L/20)
-    w=int(wmax/10)
-    we=int(wmax/10)
-    wh=w
-    print("w:",w)
-    print("wmax:",wmax)
-    print("we:",we)
-    print("wh:",wh)
-    print("option:",option)
-    #model['entropy'].bool
-
-
-
-    start=time()
-    temp_w=0
-#    g()
- #   input()
-
-    calculate_fa(df,model,w,wmax,we,wh,L,option)
-    temp_b=[]
-    temp_fi=[]
-    temp_R=[]
+#L,V=0,0
+##wh=0
+#model=0
+#ngram=0
+#@profile
+#def main():
+#    global L,V,wh,model,ngram
+#    with open("corpus/lotr_en.txt") as f:
+#        file=f.read()
+#    data=remove_punctuation(file)
+#    start=time()
+#    fmin=4
+#    order=1
+#    split="word"
+#    option="obc"
+#    make_markov_chain(data.split(),order=order,split=split)
+#
+#    #model
+#    df=make_dataframe(model,fmin)
+#    print("chain time:",time()-start)
+#    #print(df)
+#
+#    ### CALCULATE FA ###
+#
+#    print("order:",order)
+#    print("split by:",split)
+#    print("L:",L)
+#    print("V: ",V)
+#    print("fmin:",fmin)
+#    print("valid V:",len(df['ngram']))
+#    print()
+#    wmax=int(L/20)
+#    w=int(wmax/10)
+#    we=int(wmax/10)
+#    wh=w
+#    print("w:",w)
+#    print("wmax:",wmax)
+#    print("we:",we)
+#    print("wh:",wh)
+#    print("option:",option)
+#    #model['entropy'].bool
+#
+#
+#
+#    start=time()
+#    temp_w=0
+##    g()
+# #   input()
+#
+#    calculate_fa(df,model,w,wmax,we,wh,L,option)
+#    temp_b=[]
+#    temp_fi=[]
+#    temp_R=[]
+##    print(df)
+#    print()
+#    print("fa time:",time()-start)
+#    #for ngram in model:
+#        #print(model[ngram].fa)
+#
+#
+#
+#    for ngram in df['ngram']:
+#        c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],maxfev=5000)
+#        model[ngram].a=c[0]
+#        model[ngram].b=c[1]
+#        temp_b.append(c[1])
+#        temp_fi.append(model[ngram].F_i/L)
+#        temp_R.append(R(np.array(model[ngram].pos)))
+#    df['R']=temp_R
+#    df['f_i']=temp_fi
+#    df['alpha']=temp_b
 #    print(df)
-    print()
-    print("fa time:",time()-start)
-    #for ngram in model:
-        #print(model[ngram].fa)
-
-
-
-    for ngram in df['ngram']:
-        c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],maxfev=5000)
-        model[ngram].a=c[0]
-        model[ngram].b=c[1]
-        temp_b.append(c[1])
-        temp_fi.append(model[ngram].F_i/L)
-        temp_R.append(R(np.array(model[ngram].pos)))
-    df['R']=temp_R
-    df['f_i']=temp_fi
-    df['alpha']=temp_b
-    print(df)
-
-
-
-    pass
+#
+#
+#
+#    pass
+#
 
 import dash
 import dash_core_components as dcc
@@ -476,6 +478,10 @@ layout1=html.Div([
                         )])
 from dash.dependencies import Input,Output,State
 app.layout=layout1
+#@app.callback([Output("w","value"),Output("wh","value"),Output("wh","value"),Output("wm","value"),
+#               Input("corpus","value")])
+#def calc_window():
+#    pass
 @app.callback([Output("table","data"),Output("alert","children"),Output("lenght","children"),Output("vocabulary","children"),Output("chain_time","children")],
               [Input("chain_button","n_clicks")],
               [State("corpus","value"),
@@ -488,19 +494,7 @@ app.layout=layout1
                State("we","value"),
                State("wm","value")])
 def update_table(n,corpus,n_size,split,table_state,condition,w,wh,we,wm):
-    print(n)
-    print(w,wh,we,wm,condition)
-#print(table_state)
-    #print(m)
-    #if m is not None and table_state is not None:
-    #    print("fa")
-    #    print(table_state)
-
-
-    #print(corpus)
-    #print(n_size)
-    #print(split)
-
+    
     if n is None:
         return dash.no_update,dash.no_update,dash.no_update,dash.no_update,dash.no_update
 
@@ -534,18 +528,24 @@ def update_table(n,corpus,n_size,split,table_state,condition,w,wh,we,wm):
     for index,ngram in enumerate(df['ngram']):
         print(str(index)+" of "+str(len(df['ngram'])),end="\r")
         with ThreadPoolExecutor() as e:
-            e.map(func,windows)
+            e.map(func,windows,wh,L)
     #calculate_fa(df,model,w,wh,we,wm,L,condition)
+    ###
     temp_b=[]
+
     temp_fi=[]
     temp_R=[]
-    for ngram in df['ngram']:  
-        c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],maxfev=5000)
-        model[ngram].a=c[0]
-        model[ngram].b=c[1]
-        temp_b.append(c[1])
-        temp_fi.append(model[ngram].F_i/L)
-        temp_R.append(R(np.array(model[ngram].pos)))
+    for ngram in df['ngram']:
+        try:
+            c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],maxfev=5000)
+            model[ngram].a=c[0]
+            model[ngram].b=c[1]
+            temp_b.append(c[1])
+            temp_fi.append(model[ngram].F_i/L)
+            temp_R.append(R(np.array(model[ngram].pos)))
+        except ValueError:
+            print(model[ngram])
+            print([*model[ngram].fa.keys()])
     df['R']=temp_R
     df['f_i']=temp_fi
     df['alpha']=temp_b    #return [{"name":i,"id":i}for i in df.columns]
