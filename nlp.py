@@ -1,3 +1,34 @@
+
+###### NOTE ######
+
+"""
+
+rebild configuration panel add flunctuacion analyze
+
+
+ 
+try new input 
+make better short 
+
++ spiner
+
+
+
+ 
+
+
+
+
+
+"""
+
+
+
+
+
+
+
+
 #with open("corpus/lotr_en.txt") as f:
 #    file=f.read()
 from libs import *
@@ -51,12 +82,12 @@ def make_dataframe(model,L,fmin=0):
 
     #print(data['ngram'][0])
     for i,ngram in enumerate(model):
-        if ngram.__class__ is tuple:
-            data["ngram"].append("  ".join(ngram))
-        else:
-            data["ngram"].append(ngram)
+        #if ngram.__class__ is tuple:
+        #    data["ngram"].append("  ".join(ngram))
+        #else:
+        data["ngram"].append(ngram)
         data["F_i"][i]=model[ngram].F_i
-        data["f_i"][i]=round(model[ngram].F_i/L,7)
+        #data["f_i"][i]=round(model[ngram].F_i/L,7)
     return pd.DataFrame(data=data)
 #L=0#
 #V=0#
@@ -78,27 +109,27 @@ def make_markov_chain(data,order=1,split='word'):
             if window in model: # Приєднуємо до вже існуючого розподілу
                  model[window].update ([data[i+order]])
                  model[window].pos.append(i)
-                 #model[window].bool.append(i)
+                 model[window].bool[i]=1
 
             else:
                  model[window] = Ngram ([data[i+order]])
                  model[window].pos=[]
                  model[window].pos.append(i)
 
-                 #model[window].bool=[]#np.zeros(len(data)-order)
-                 #model[window].bool.append(i)
+                 model[window].bool=np.zeros(L)
+                 model[window].bool[i]=1
     else:
         for i in range(L):
             if data[i] in model: # Приєднуємо до вже існуючого розподілу
                  model[data[i]].update ([data[i+order]])
                  model[data[i]].pos.append(i)
-                 #model[data[i]].bool.append(i)
+                 model[data[i]].bool[i]=1
             else:
                  model[data[i]] = Ngram ([data[i+order]])
                  model[data[i]].pos=[]
                  model[data[i]].pos.append(i)
-                 #model[data[i]].bool=[]#np.zeros(len(data)-order)
-                 #model[data[i]].bool.append(i)
+                 model[data[i]].bool=np.zeros(L)
+                 model[data[i]].bool[i]=1
     V=len(model)
 
 
@@ -144,14 +175,10 @@ def pbc(positions,L):
 
 #print(df["ngram"])
 @jit(nopython=True)
-def s(*args):
-    indexes,w,wm=args
+def s(window):
     suma=0
-    for index in indexes:
-        if index >=w and index <=wm:
-            suma+=1
-        if index >wm:
-            return suma
+    for i in range(len(window)):
+        suma+=window[i]
     return suma
 @jit(nopython=True)
 def mse(x):
@@ -167,12 +194,13 @@ def R(x):
 @jit(nopython=True)
 def fa(x,args):
     #print(w)
-    wi,whi,l=args
-    #print(wi,wsh,l)
-    count=np.empty(len(range(wi,l,whi)),dtype=np.uint8)
-    for index,i in enumerate(range(0,l-wi,whi)):
-        count[index]=s(x,i,i+wi)
+    wi,wsh,wh,l=args
+    
+    count=np.empty(len(range(wi,l,wsh)),dtype=np.uint8)
 
+    for index,i in enumerate(range(0,l-wi,wh)):
+        count[index]=s(x[i:i+wi])
+        
     return count,mse(count)
 @jit(nopython=True)
 def fit(x,a,b):
@@ -202,6 +230,9 @@ with ThreadPoolExecutor() as e:
     windows=list(range(w,wmax,we))
     e.map(first_pool,windows)
 """
+def func(wind):
+    model[ngram].counts[wind],model[ngram].fa[wind]=fa(model[ngram].bool,(wind,wh,L))
+
 def calculate_fa(df,model,*args):
     fa(np.array([1,2],dtype=np.uint8),(1,2,3))
     w,wmax,we,wh,L,opt=args
@@ -312,8 +343,8 @@ colors={
 
 import dash_bootstrap_components as dbc
 layout2=html.Div()
-app.layout=layout2
-# old layout was fun but uselse 
+
+# old layout was fun but not what i wanted
 #
 layout1=html.Div([
                 dbc.Row(
@@ -324,13 +355,82 @@ layout1=html.Div([
                                 dbc.CardHeader("Configuration:"),
                                 dbc.CardBody(
                                 [
-                                    html.H6("Choose corpus:"),
+                                    html.Label("Choose corpus:"),
                                     dcc.Dropdown(id="corpus",options=[{"label":i,"value":i}for i in corpuses]),
-                                    html.H6("Size of ngram:"),
-                                    dcc.Slider(id="n_size",min=1,max=9,value=1,marks={i:"{}".format(i)for i in range(1,10)}),
-                                    html.H6("Split by:"),
-                                    dcc.RadioItems(id='split',options=[{"label":"symbol","value":"symbol"},{"label":"word","value":"word"}],value="word"),
-                                    dbc.Button("Make Markov chain", id="chain_button",color="primary",block=True),
+                                    
+                                    dbc.InputGroup(
+                                        [
+                                            dbc.InputGroupAddon("Size of ngram", addon_type="prepend"),
+                                            dbc.Input(id="n_size",type="number"),
+                                        ],size="sm",className="config"
+                                    ),
+    
+                                    dbc.InputGroup(
+                                        [
+                                            dbc.InputGroupAddon("Split by", addon_type="prepend"),
+                                            dbc.Select(
+                                                id="split",
+                                                options=[
+                                                    {"label":"symbol","value":"symbol"},
+                                                    {"label":"word","value":"word"}
+                                                ]
+                                            )
+                                        ],size="sm",className="config"
+                                    ),
+
+                                    dbc.InputGroup(
+                                        [
+                                            #dbc.InputGroupAddon("Boundary Condition:", addon_type="append"),
+                                            dbc.Select(
+                                                id="condition",
+                                                options=[
+                                                    {"label":"no","value":"no"},
+                                                    {"label":"periodic","value":"periodic"},
+                                                    {"label":"ordinary","value":"ordinary"}
+                                                ]
+                                            ),
+                                            dbc.InputGroupAddon("Boundary Condition:", addon_type="append"),
+                                        ],size="sm",className="config"
+                                    ),
+                                    html.Label("Sliding window"),
+
+                                    dbc.InputGroup(
+                                        [
+                                            dbc.InputGroupAddon("Size of window", addon_type="prepend"),
+                                            dbc.Input(id="w",type="number"),
+                                        ],size="sm",className="window"
+                                    ),
+                                    
+                                    dbc.InputGroup(
+                                        [
+                                            dbc.InputGroupAddon("Window shift", addon_type="prepend"),
+                                            dbc.Input(id="wh",type="number"),
+                                        ],size="sm",className="window"
+                                    ),
+
+                                    dbc.InputGroup(
+                                        [
+                                            dbc.InputGroupAddon("Window exspansion", addon_type="prepend"),
+                                            dbc.Input(id="we",type="number"),
+                                        ],size="sm",className="window"
+                                    ),
+
+                                    dbc.InputGroup(
+                                        [
+                                            dbc.InputGroupAddon("Max size of window", addon_type="prepend"),
+                                            dbc.Input(id="wm",type="number"),
+                                        ],size="sm",className="window"
+                                    ),
+
+
+                                    #dbc.Input(placeholder="size of ngram",type="number"),
+                                    #html.H6("Size of ngram:"),
+                                    #dcc.Slider(id="n_size",min=1,max=9,value=1,marks={i:"{}".format(i)for i in range(1,10)}),
+                                    #html.H6("Split by:"),
+                                    #dcc.RadioItems(id='split',options=[{"label":"symbol","value":"symbol"},{"label":"word","value":"word"}],value="word"),
+                                    #html.H6("Boundary Condition:"),
+                                    #dcc.RadioItems(id='condition',options=[{"label":"no","value":"no"},{"label":"periodic","value":"periodic"},{"label":"ordinary","value":"ordinary"}],value="words"),
+                                    dbc.Button("Analyze", id="chain_button",color="primary",block=True),
                                     html.Div(id="alert",children=[])
 
                                     #html.H6("Boundary Condition:"),
@@ -357,7 +457,7 @@ layout1=html.Div([
                     dbc.Col(
                             dbc.Card(
                                     dt.DataTable(id='table',
-                                                columns=[{"name":i,"id":i}for i in ["ngram","F_i","f_i","R","Ω"]],
+                                                columns=[{"name":i,"id":i}for i in ["ngram","F_i","f_i","R","alpha"]],
 
                                                 style_data={'whiteSpace': 'normal','height': 'auto'},
                                                  editable=False,
@@ -369,57 +469,32 @@ layout1=html.Div([
                                                              #'minWidth': 40, 'width': 95, 'maxWidth': 95},
                                                  style_table={'height': 350, 'overflowY': 'auto',"overflowX":"none"}
                                                 )
-                                ,style={"padding":"5%","margin-top":"10px"}),
-                        width={"size":6}
+                                ,style={"padding":"5%","margin-top":"10px","margin-right":"10px"}),
+                        width={"size":9}
                             ),
-                    dbc.Col(
-                            dbc.Card(
-                                    [
-                                    dbc.CardHeader("Sliding window:"),
-                                    dbc.CardBody(
-                                                [
-                                                html.H6("Size of windows"),
-                                                dbc.Input(id="w"),
-                                                html.H6("Windows shift"),
-                                                dbc.Input(id="wh"),
-                                                html.H6("Windows exspansion"),
-                                                dbc.Input(id="we"),
-                                                html.H6("Max size of window"),
-                                                dbc.Input(id="wm"),
-                                                html.Br(),
-                                                dbc.Button("Fluctuation analyze",id="fa",block=True),
-                                                #html.Div(id="fa-time",children=["Time: ",])
-                                                ]
-                                                ),
-                                    dbc.CardHeader("Characteristics"),
-                                    dbc.CardBody(
-                                                html.Div(id="fa-time",children=["Time: ",])
-                                                )
-                                    ],style={"margin-top":10,"margin-right":10}
-                                    ),
-                            width={"size":3}
-                            )
-                    ]
+                                        ]
                         )])
 from dash.dependencies import Input,Output,State
-
+app.layout=layout1
 @app.callback([Output("table","data"),Output("alert","children"),Output("lenght","children"),Output("vocabulary","children"),Output("chain_time","children")],
-              [Input("chain_button","n_clicks"),Input("fa","n_clicks")],
+              [Input("chain_button","n_clicks")],
               [State("corpus","value"),
                State("n_size","value"),
                State("split","value"),
                State("table","page_current"),
+               State("condition","value"),
                State("w","value"),
                State("wh","value"),
                State("we","value"),
                State("wm","value")])
-def update_table(n,m,corpus,n_size,split,table_state,w,wh,we,wm):
+def update_table(n,corpus,n_size,split,table_state,condition,w,wh,we,wm):
     print(n)
-    #print(table_state)
-    print(m)
-    if m is not None and table_state is not None:
-        print("fa")
-        print(table_state)
+    print(w,wh,we,wm,condition)
+#print(table_state)
+    #print(m)
+    #if m is not None and table_state is not None:
+    #    print("fa")
+    #    print(table_state)
 
 
     #print(corpus)
@@ -440,7 +515,6 @@ def update_table(n,m,corpus,n_size,split,table_state,w,wh,we,wm):
         del model
     with open("corpus/"+corpus) as f:
         file=f.read()
-    #return [{"name":i,"id":i}for i in ["ngram","fmin"]]
     data=remove_punctuation(file)
     start=time()
     #fmin=4
@@ -448,15 +522,36 @@ def update_table(n,m,corpus,n_size,split,table_state,w,wh,we,wm):
     #split="word"
     #option="obc"
     make_markov_chain(data.split(),order=n_size,split=split)
-    #print()
-    #model
+
+    
     print(V)
     print(L)
     df=make_dataframe(model,L)
-    #return [{"name":i,"id":i}for i in df.columns]
+    print(df)
+    windows=list(range(w,wm,we))
+    fa(np.zeros(5),(1,2,3,4))
+
+    for index,ngram in enumerate(df['ngram']):
+        print(str(index)+" of "+str(len(df['ngram'])),end="\r")
+        with ThreadPoolExecutor() as e:
+            e.map(func,windows)
+    #calculate_fa(df,model,w,wh,we,wm,L,condition)
+    temp_b=[]
+    temp_fi=[]
+    temp_R=[]
+    for ngram in df['ngram']:  
+        c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],maxfev=5000)
+        model[ngram].a=c[0]
+        model[ngram].b=c[1]
+        temp_b.append(c[1])
+        temp_fi.append(model[ngram].F_i/L)
+        temp_R.append(R(np.array(model[ngram].pos)))
+    df['R']=temp_R
+    df['f_i']=temp_fi
+    df['alpha']=temp_b    #return [{"name":i,"id":i}for i in df.columns]
     print("chain time:",time()-start)
     #print(df.to_dict("records"))
-    #print(df)
+    print(df)
     return [df.to_dict("records"),dash.no_update,["Lenght: ",L],["Vocabulary: ",V],["Time: ",round(time()-start,6)]]
 
 #@app.callback([Output("table","data")],
