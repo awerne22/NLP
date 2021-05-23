@@ -82,12 +82,12 @@ def make_dataframe(model,L,fmin=0):
 
     #print(data['ngram'][0])
     for i,ngram in enumerate(model):
-        #if ngram.__class__ is tuple:
-        #    data["ngram"].append("  ".join(ngram))
-        #else:
-        data["ngram"].append(ngram)
+        if ngram.__class__ is tuple:
+            data["ngram"].append("  ".join(ngram))
+        else:
+            data["ngram"].append(ngram)
         data["F_i"][i]=model[ngram].F_i
-        #data["f_i"][i]=round(model[ngram].F_i/L,7)
+        data["f_i"][i]=round(model[ngram].F_i/L,7)
     return pd.DataFrame(data=data)
 #L=0#
 #V=0#
@@ -193,14 +193,10 @@ def R(x):
     return np.sqrt(ts-(t**2))/t
 @jit(nopython=True)
 def fa(x,args):
-    #print(w)
-    wi,wsh,wh,l=args
-    
+    wi,wsh,l=args
     count=np.empty(len(range(wi,l,wsh)),dtype=np.uint8)
-
-    for index,i in enumerate(range(0,l-wi,wh)):
+    for index,i in enumerate(range(0,l-wi,wsh)):
         count[index]=s(x[i:i+wi])
-        
     return count,mse(count)
 @jit(nopython=True)
 def fit(x,a,b):
@@ -230,10 +226,7 @@ with ThreadPoolExecutor() as e:
     windows=list(range(w,wmax,we))
     e.map(first_pool,windows)
 """
-####tyt hyinya### 
-def func(wind,model,wh,l):
-    model[ngram].counts[wind],model[ngram].fa[wind]=fa(model[ngram].bool,(wind,wh,l))
-
+"""
 def calculate_fa(df,model,*args):
     fa(np.array([1,2],dtype=np.uint8),(1,2,3))
     w,wmax,we,wh,L,opt=args
@@ -248,7 +241,7 @@ def calculate_fa(df,model,*args):
 
 
     pass
-
+"""
 #print("fa time:",time()-start)
 #print(df)
 #L,V=0,0
@@ -375,7 +368,8 @@ layout1=html.Div([
                                                 options=[
                                                     {"label":"symbol","value":"symbol"},
                                                     {"label":"word","value":"word"}
-                                                ]
+                                                ],
+                                                value="word"
                                             )
                                         ],size="sm",className="config"
                                     ),
@@ -389,7 +383,8 @@ layout1=html.Div([
                                                     {"label":"no","value":"no"},
                                                     {"label":"periodic","value":"periodic"},
                                                     {"label":"ordinary","value":"ordinary"}
-                                                ]
+                                                ],
+                                                value="no"
                                             ),
                                             dbc.InputGroupAddon("Boundary Condition:", addon_type="append"),
                                         ],size="sm",className="config"
@@ -478,11 +473,25 @@ layout1=html.Div([
                         )])
 from dash.dependencies import Input,Output,State
 app.layout=layout1
-#@app.callback([Output("w","value"),Output("wh","value"),Output("wh","value"),Output("wm","value"),
-#               Input("corpus","value")])
-#def calc_window():
-#    pass
-@app.callback([Output("table","data"),Output("alert","children"),Output("lenght","children"),Output("vocabulary","children"),Output("chain_time","children")],
+
+@app.callback([Output("w","value"),
+               Output("wh","value"),
+              # Output("we","value"),
+               Output("wm","value"),
+               Output("lenght","children"),],
+               [Input("corpus","value")])
+def calc_window(corpus):
+    if corpus is None:
+        return dash.no_update,dash.no_update,dash.no_update,dash.no_update
+    global L,data
+    with open("corpus/"+corpus) as f:
+        file=f.read()
+    data=remove_punctuation(file)
+    L=len(data.split())
+    wm=int(L/10)
+    w=int(wm/10)
+    return [w,w,wm,["Lenght: ",L]]
+@app.callback([Output("table","data"),Output("alert","children"),Output("vocabulary","children"),Output("chain_time","children")],
               [Input("chain_button","n_clicks")],
               [State("corpus","value"),
                State("n_size","value"),
@@ -496,63 +505,82 @@ app.layout=layout1
 def update_table(n,corpus,n_size,split,table_state,condition,w,wh,we,wm):
     
     if n is None:
-        return dash.no_update,dash.no_update,dash.no_update,dash.no_update,dash.no_update
+        return dash.no_update,dash.no_update,dash.no_update,dash.no_update
 
     #add alert corpus if not selected
     if corpus is None :
-        return dash.no_update,dbc.Alert("Please choose corpus",color="danger",duration=2000,dismissable=False),dash.no_update,dash.no_update,dash.no_update
+        return dash.no_update,dbc.Alert("Please choose corpus",color="danger",duration=2000,dismissable=False),dash.no_update,dash.no_update
 
     print()
     ###  MAKE MARKOV CHAIN ####
-    global L,V,model,ngram
-    if n>1:
-        del model
-    with open("corpus/"+corpus) as f:
-        file=f.read()
-    data=remove_punctuation(file)
+    global data,L,V,model,ngram
+    #if n>1:
+    #del model
+    #with open("corpus/"+corpus) as f:
+    #    file=f.read()
+    #data=remove_punctuation(file)
     start=time()
     #fmin=4
     #order=1
     #split="word"
     #option="obc"
+    print(L)
     make_markov_chain(data.split(),order=n_size,split=split)
 
     
     print(V)
     print(L)
+    input()
     df=make_dataframe(model,L)
     print(df)
     windows=list(range(w,wm,we))
-    fa(np.zeros(5),(1,2,3,4))
-
+    fa(np.zeros(5),(1,3,4))
+    
+    def func(wind):
+        model[ngram].counts[wind],model[ngram].fa[wind]=fa(model[ngram].bool,(wind,wh,L))
     for index,ngram in enumerate(df['ngram']):
         print(str(index)+" of "+str(len(df['ngram'])),end="\r")
         with ThreadPoolExecutor() as e:
-            e.map(func,windows,wh,L)
+            e.map(func,windows)
     #calculate_fa(df,model,w,wh,we,wm,L,condition)
     ###
     temp_b=[]
 
-    temp_fi=[]
+   # temp_fi=[]
     temp_R=[]
     for ngram in df['ngram']:
         try:
             c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],maxfev=5000)
             model[ngram].a=c[0]
             model[ngram].b=c[1]
-            temp_b.append(c[1])
-            temp_fi.append(model[ngram].F_i/L)
-            temp_R.append(R(np.array(model[ngram].pos)))
-        except ValueError:
-            print(model[ngram])
-            print([*model[ngram].fa.keys()])
+            temp_b.append(round(c[1],7))
+            #temp_fi.append(model[ngram].F_i/L)
+            temp_R.append(round(R(np.array(model[ngram].pos)),7))
+        except KeyError:
+            try:
+                ngram=tuple(ngram.split())
+                c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],maxfev=5000)
+                model[ngram].a=c[0]
+                model[ngram].b=c[1]
+                temp_b.append(round(c[1],7))
+                #temp_fi.append(model[ngram].F_i/L)
+                temp_R.append(round(R(np.array(model[ngram].pos)),7))
+            
+            except ValueError:
+                print(model[ngram])
+                print(model[ngram].fa)
+                input()
+                temp_b.append(0)
+                temp_R.append(R(np.array(model[ngram].pos)))
+            
+
     df['R']=temp_R
-    df['f_i']=temp_fi
+    #df['f_i']=temp_fi
     df['alpha']=temp_b    #return [{"name":i,"id":i}for i in df.columns]
     print("chain time:",time()-start)
     #print(df.to_dict("records"))
     print(df)
-    return [df.to_dict("records"),dash.no_update,["Lenght: ",L],["Vocabulary: ",V],["Time: ",round(time()-start,6)]]
+    return [df.to_dict("records"),dash.no_update,["Vocabulary: ",V],["Time: ",round(time()-start,6)]]
 
 #@app.callback([Output("table","data")],
 #              [Input("wh","value")])
