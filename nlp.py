@@ -373,7 +373,19 @@ layout1=html.Div([
                                                 active_tab="tab1"
                                             )
                                         ),
-                                        dbc.CardBody(dcc.Graph(id="fig"))
+                                        dbc.CardBody([
+                                            dcc.RadioItems(
+                                                id="scale",
+                                                options=[
+                                                    {"label":"linear","value":"linear"},
+                                                    {"label":"log","value":"log"}
+                                                ],
+                                                value="linear"
+
+                                            ),
+                                            dcc.Graph(id="fig")
+
+                                        ])
 
                                     ]
                                 )
@@ -388,9 +400,10 @@ app.layout=layout1
 
 @app.callback(Output("fig","figure"),
               [Input("card-tabs","active_tab"),
-                Input("table","active_cell")
+                Input("table","active_cell"),
+               Input("scale","value")
                ])
-def tab_content(active_tab,active_cell):
+def tab_content(active_tab,active_cell,scale):
     global model,df,L
     fig=go.Figure()
     fig.update_layout(
@@ -401,6 +414,7 @@ def tab_content(active_tab,active_cell):
             #print(model[tuple(df['ngram'][active_cell['row']].split())].bool)
             fig.add_trace(go.Scatter(x=np.array(range(L)),y=model[tuple(df['ngram'][active_cell['row']].split())].bool))
             #print(fig)
+            fig.update_xaxes(type=scale)
             return fig
         else:
             ##
@@ -419,6 +433,8 @@ def tab_content(active_tab,active_cell):
             fig.add_trace(go.Scatter(
                                 x=[*model[tuple(df['ngram'][active_cell['row']].split())].fa.keys()],
                                 y=model[tuple(df['ngram'][active_cell['row']].split())].temp_fa))
+            
+            fig.update_xaxes(type=scale)
             return fig
         else:
             return fig
