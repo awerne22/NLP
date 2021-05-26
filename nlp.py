@@ -233,15 +233,17 @@ layout1=html.Div([
                                 [
 
                                     html.Label("Choose corpus:"),
+                                    html.Div(
+                                        [
                                     dcc.Dropdown(id="corpus",options=[{"label":i,"value":i}for i in corpuses]),
                                     
                                     dbc.InputGroup(
                                         [
                                             dbc.InputGroupAddon("Size of ngram", addon_type="prepend"),
-                                            dbc.Input(id="n_size",type="number"),
-                                        ],size="sm",className="config"
+                                            dbc.Input(id="n_size",type="number",value=1),
+                                        ],size="md",className="config"
                                     ),
-    
+                                    
                                     dbc.InputGroup(
                                         [
                                             dbc.InputGroupAddon("Split by", addon_type="prepend"),
@@ -253,7 +255,7 @@ layout1=html.Div([
                                                 ],
                                                 value="word"
                                             )
-                                        ],size="sm",className="config"
+                                        ],size="md",className="config"
                                     ),
 
                                     dbc.InputGroup(
@@ -269,42 +271,42 @@ layout1=html.Div([
                                                 value="no"
                                             ),
                                             dbc.InputGroupAddon("Boundary Condition:", addon_type="append"),
-                                        ],size="sm",className="config"
+                                        ],size="md",className="config"
                                     ),
                                     dbc.InputGroup(
                                         [
-                                            dbc.InputGroupAddon("f min",addon_type="prepend"),
-                                            dbc.Input(id="f_min",type="number")
+                                            dbc.InputGroupAddon("filter",addon_type="prepend"),
+                                            dbc.Input(id="f_min",type="number",value=0)
                                         ]
                                     ),
                                     html.Label("Sliding window"),
 
                                     dbc.InputGroup(
                                         [
-                                            dbc.InputGroupAddon("Size of window", addon_type="prepend"),
+                                            dbc.InputGroupAddon("Min window", addon_type="prepend"),
                                             dbc.Input(id="w",type="number"),
-                                        ],size="sm",className="window"
+                                        ],size="md",className="window"
                                     ),
                                     
                                     dbc.InputGroup(
                                         [
                                             dbc.InputGroupAddon("Window shift", addon_type="prepend"),
                                             dbc.Input(id="wh",type="number"),
-                                        ],size="sm",className="window"
+                                        ],size="md",className="window"
                                     ),
 
                                     dbc.InputGroup(
                                         [
                                             dbc.InputGroupAddon("Window exspansion", addon_type="prepend"),
                                             dbc.Input(id="we",type="number"),
-                                        ],size="sm",className="window"
+                                        ],size="md",className="window"
                                     ),
 
                                     dbc.InputGroup(
                                         [
-                                            dbc.InputGroupAddon("Max size of window", addon_type="prepend"),
+                                            dbc.InputGroupAddon("Max window", addon_type="prepend"),
                                             dbc.Input(id="wm",type="number"),
-                                        ],size="sm",className="window"
+                                        ],size="md",className="window"
                                     ),
 
 
@@ -315,8 +317,11 @@ layout1=html.Div([
                                     #dcc.RadioItems(id='split',options=[{"label":"symbol","value":"symbol"},{"label":"word","value":"word"}],value="word"),
                                     #html.H6("Boundary Condition:"),
                                     #dcc.RadioItems(id='condition',options=[{"label":"no","value":"no"},{"label":"periodic","value":"periodic"},{"label":"ordinary","value":"ordinary"}],value="words"),
-                                    dbc.Button("Analyze", id="chain_button",color="primary",block=True),
-                                    html.Div(id="alert",children=[]),
+                                    html.Br(),
+                                            dbc.Button("Analyze", id="chain_button",color="primary",block=True),
+                                            dbc.Progress(id="progress",value=0)
+                                        ]),
+                                    html.Div(id="alert",children=[])
                                                                         #html.H6("Boundary Condition:"),
                                     #dcc.RadioItems(id='condition',options=[{"label":"no","value":"no"},{"label":"periodic","value":"periodic"},{"label":"ordinary","value":"ordinary"}],value="words"),
                                 ]
@@ -329,10 +334,10 @@ layout1=html.Div([
                                         html.Div(id="lenght",children=["Lenght: ",]),
                                         html.Div(id="vocabulary",children=["Vocabulary: ",]),
                                         html.Div(id="chain_time",children=["Time: ",]),
-
-                                        html.Div(id="seve",
-                                             children=[dbc.Button("Save data",id="save",color="success",size="sm")]
-                                            ),
+                                        dbc.Spinner(dbc.Button("Save data",id="save",color="success",size="md")),
+                                        html.Div(id="temp_seve",
+                                             children=[]
+                                            )
 
 
                                     ]
@@ -345,7 +350,9 @@ layout1=html.Div([
                     dbc.Col(
                             [
                             dbc.Card(
-                                [
+                                    
+                                    [
+                                    dbc.Spinner(
                                      dt.DataTable(id='table',
                                                 columns=[{"name":i,"id":i}for i in ["ngram","F_i","R","alpha","goodnes"]],
 
@@ -355,10 +362,15 @@ layout1=html.Div([
                                                  sort_action="native",
                                                  #page_size=10,
                                                                    #fixed_rows={'headers': True},
-                                                 style_cell={'whiteSpace': 'normal','height': 'auto','textAlign': 'right',},
+                                                 style_cell={'whiteSpace': 'normal',
+                                                             'height': 'auto',
+                                                             'textAlign': 'right',
+                                                             "fontSize":15,
+                                                             #"font-family":"sans-serif"
+                                                             },
                                                              #'minWidth': 40, 'width': 95, 'maxWidth': 95},
                                                  style_table={'height': 350, 'overflowY': 'auto',"overflowX":"none"}
-                                                )]
+                                                ))]
                                 ,style={"padding":"0%","margin-top":"10px","margin-right":"10px"}),
                                 dbc.Card(
                                     [
@@ -366,7 +378,8 @@ layout1=html.Div([
                                             dbc.Tabs(
                                                 [
                                                     dbc.Tab(label="distribution",tab_id="tab1"),
-                                                    dbc.Tab(label="flunctuacion",tab_id="tab2")
+                                                    dbc.Tab(label="flunctuacion",tab_id="tab2"),
+                                                    dbc.Tab(label="alpha/R",tab_id="tab3")
                                                 ],
                                                 id='card-tabs',
                                                 card=True,
@@ -387,7 +400,7 @@ layout1=html.Div([
 
                                         ])
 
-                                    ]
+                                    ],style={"margin-right":"10px"}
                                 )
                             ],
                         width={"size":9}
@@ -397,13 +410,13 @@ layout1=html.Div([
 from dash.dependencies import Input,Output,State
 app.layout=layout1
 
-
+import plotly.express as px
 @app.callback(Output("fig","figure"),
               [Input("card-tabs","active_tab"),
                 Input("table","active_cell"),
                Input("scale","value")
-               ])
-def tab_content(active_tab,active_cell,scale):
+               ],[State("n_size","value")])
+def tab_content(active_tab,active_cell,scale,n):
     global model,df,L
     fig=go.Figure()
     fig.update_layout(
@@ -411,35 +424,67 @@ def tab_content(active_tab,active_cell,scale):
     )
     if active_tab=="tab1":
         if active_cell:
-            #print(model[tuple(df['ngram'][active_cell['row']].split())].bool)
-            fig.add_trace(go.Scatter(x=np.array(range(L)),y=model[tuple(df['ngram'][active_cell['row']].split())].bool))
-            #print(fig)
+            ngram=''
+            if n>1:
+                ngram=tuple(df['ngram'][active_cell['row']].split())
+            else:
+                ngram=df['ngram'][active_cell['row']]
+            fig.add_trace(go.Scatter(x=np.array(range(L)),y=model[ngram].bool))
             fig.update_xaxes(type=scale)
             return fig
         else:
             ##
             return fig
         return fig
-    else:
+    if active_tab=="tab2":
         if active_cell:
+            if n>1:
+                ngram=tuple(df['ngram'][active_cell['row']].split())
+            else:
+                ngram=df['ngram'][active_cell['row']]
             fig.add_trace(
-                    go.Scatter(x=[*model[tuple(df['ngram'][active_cell['row']].split())].fa.keys()],
-                                     y=[*model[tuple(df['ngram'][active_cell['row']].split())].fa.values()],
-                                     mode='markers'))
-
-                    #go.Scatter(x=[*model[tuple(df['ngram'][active_cell['row']].split())].keys()],
-                    #                 y=model[tuple(df['ngram'][active_cell['row']].split())].temp_fa)
-                
+                    go.Scatter(x=[*model[ngram].fa.keys()],
+                                     y=[*model[ngram].fa.values()],
+                                     mode='markers',
+                                    name="∆F"))
             fig.add_trace(go.Scatter(
-                                x=[*model[tuple(df['ngram'][active_cell['row']].split())].fa.keys()],
-                                y=model[tuple(df['ngram'][active_cell['row']].split())].temp_fa))
-            
+                                x=[*model[ngram].fa.keys()],
+                                y=model[ngram].temp_fa,
+                                name="fit"))
             fig.update_xaxes(type=scale)
             return fig
         else:
             return fig
+    else:
+        hover_data=[]
+        if active_cell:
+            if n>1:
+                ngram=tuple(df['ngram'][active_cell['row']].split())
+            else:
+                ngram=df['ngram'][active_cell['row']]
+            
+            for data in df['ngram']:
+                hover_data.append("".join(data))
+            fig.add_trace(go.Scatter(x=df["R"],y=df["alpha"],mode="markers",text=hover_data))
+            fig.add_trace(go.Scatter(x=[df['R'][active_cell['row']]],
+                                     y=[df["alpha"][active_cell['row']]],
+                                     mode="markers",
+                                     text=' '.join(ngram),
+                                     marker=dict(
+                                         size=20,
+                                         color="red"
+                                     ))) 
+            fig.update_layout(showlegend=False)
+            return fig
+        else:
+            
+            for data in df["ngram"]:
+                hover_data.append("".join(data))
+            fig.add_trace(go.Scatter(x=df["R"],y=df["alpha"],mode="markers",text=hover_data))
+        return fig        
+
         return dash.no_update
-@app.callback([Output("seve","children")],
+@app.callback([Output("temp_seve","children")],
               [Input("save","n_clicks")])
 def save(n):
     if n is None :
@@ -473,7 +518,8 @@ def calc_window(corpus):
     w=int(wm/10)
     return [w,w,wm,["Lenght: ",L]]
 @app.callback([Output("table","data"),Output("alert","children"),Output("vocabulary","children"),Output("chain_time","children")],
-              [Input("chain_button","n_clicks")],
+              [Input("chain_button","n_clicks"),
+               Input("progress","value")],
               [State("corpus","value"),
                State("n_size","value"),
                State("split","value"),
@@ -483,8 +529,9 @@ def calc_window(corpus):
                State("w","value"),
                State("wh","value"),
                State("we","value"),
-               State("wm","value")])
-def update_table(n,corpus,n_size,split,table_state,condition,f_min,w,wh,we,wm):
+               State("wm","value"),
+               ])
+def update_table(n,progress,corpus,n_size,split,table_state,condition,f_min,w,wh,we,wm):
     
     if n is None:
         return dash.no_update,dash.no_update,dash.no_update,dash.no_update
@@ -493,7 +540,7 @@ def update_table(n,corpus,n_size,split,table_state,condition,f_min,w,wh,we,wm):
     if corpus is None :
         return dash.no_update,dbc.Alert("Please choose corpus",color="danger",duration=2000,dismissable=False),dash.no_update,dash.no_update
 
-    print()
+    
     ###  MAKE MARKOV CHAIN ####
     global data,L,V,model,ngram,df
     #if n>1:
@@ -511,7 +558,8 @@ def update_table(n,corpus,n_size,split,table_state,condition,f_min,w,wh,we,wm):
 
     
     df=make_dataframe(model,L,f_min)
-
+    print(progress)
+    progress=50
     for index,ngram in enumerate(df['ngram']):
         print(str(index)+" of "+str(len(df['ngram'])),end="\r")
         
@@ -562,7 +610,7 @@ def update_table(n,corpus,n_size,split,table_state,condition,f_min,w,wh,we,wm):
     #return [{"name":i,"id":i}for i in df.columns]
     #print("chain time:",time()-start)
     #print(df.to_dict("records"))
-    print(df)
+   # print(df)
     return [df.to_dict("records"),dash.no_update,["Vocabulary: ",V],["Time: ",round(time()-start,6)]]
 
 
