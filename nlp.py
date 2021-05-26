@@ -14,12 +14,9 @@ make better short
 
 
 
- 
-
-
-
-
-
+2. add fmin 
+3. fix analyze for n>1(hcekc fa) + add condition
+4. add graph for fa
 """
 
 
@@ -31,6 +28,7 @@ make better short
 
 #with open("corpus/lotr_en.txt") as f:
 #    file=f.read()
+from time import asctime
 from libs import *
 #print(file)
 def remove_punctuation(data):
@@ -75,19 +73,18 @@ class Ngram (dict):
 
 def make_dataframe(model,L,fmin=0):
 
-    #filtred_data=list(filter(lambda x:model[x].F_i >=fmin,model))
+    filtred_data=list(filter(lambda x:model[x].F_i >=fmin,model))
     data={"ngram":[],
-          "F_i":np.empty(len(model),dtype=np.dtype(int)),
-           "f_i":np.empty(len(model),dtype=np.dtype(float))}
+          "F_i":np.empty(len(filtred_data),dtype=np.dtype(int))}
 
     #print(data['ngram'][0])
-    for i,ngram in enumerate(model):
-        if ngram.__class__ is tuple:
-            data["ngram"].append("  ".join(ngram))
-        else:
-            data["ngram"].append(ngram)
-        data["F_i"][i]=model[ngram].F_i
-        data["f_i"][i]=round(model[ngram].F_i/L,7)
+    for i,ngram in enumerate(filtred_data):
+        #if ngram.__class__ is tuple:
+        #    data["ngram"].append("  ".join(ngram))
+        #else:
+        data["ngram"].append(ngram)
+        data["F_i"][i]=len(model[ngram].pos)
+        #data["f_i"][i]=round(model[ngram].F_i/L,7)
     return pd.DataFrame(data=data)
 #L=0#
 #V=0#
@@ -201,6 +198,373 @@ def fa(x,args):
 @jit(nopython=True)
 def fit(x,a,b):
     return a*x**b
+
+
+
+
+
+import dash
+import dash_core_components as dcc
+import dash_html_components as html
+import dash_table as dt
+from os import listdir
+import plotly.graph_objects as go
+
+app =dash.Dash(__name__)
+
+corpuses=listdir("corpus/")
+colors={
+    "background":"#a1a1a1",
+    "text":"#a1a1a1"}
+
+import dash_bootstrap_components as dbc
+layout2=html.Div()
+
+# old layout was fun but not what i wanted
+#
+layout1=html.Div([
+                dbc.Row(
+                    [
+                    dbc.Col(
+                        dbc.Card(
+                            [
+                                dbc.CardHeader("Configuration:"),
+                                dbc.CardBody(
+                                [
+
+                                    html.Label("Choose corpus:"),
+                                    dcc.Dropdown(id="corpus",options=[{"label":i,"value":i}for i in corpuses]),
+                                    
+                                    dbc.InputGroup(
+                                        [
+                                            dbc.InputGroupAddon("Size of ngram", addon_type="prepend"),
+                                            dbc.Input(id="n_size",type="number"),
+                                        ],size="sm",className="config"
+                                    ),
+    
+                                    dbc.InputGroup(
+                                        [
+                                            dbc.InputGroupAddon("Split by", addon_type="prepend"),
+                                            dbc.Select(
+                                                id="split",
+                                                options=[
+                                                    {"label":"symbol","value":"symbol"},
+                                                    {"label":"word","value":"word"}
+                                                ],
+                                                value="word"
+                                            )
+                                        ],size="sm",className="config"
+                                    ),
+
+                                    dbc.InputGroup(
+                                        [
+                                            #dbc.InputGroupAddon("Boundary Condition:", addon_type="append"),
+                                            dbc.Select(
+                                                id="condition",
+                                                options=[
+                                                    {"label":"no","value":"no"},
+                                                    {"label":"periodic","value":"periodic"},
+                                                    {"label":"ordinary","value":"ordinary"}
+                                                ],
+                                                value="no"
+                                            ),
+                                            dbc.InputGroupAddon("Boundary Condition:", addon_type="append"),
+                                        ],size="sm",className="config"
+                                    ),
+                                    dbc.InputGroup(
+                                        [
+                                            dbc.InputGroupAddon("f min",addon_type="prepend"),
+                                            dbc.Input(id="f_min",type="number")
+                                        ]
+                                    ),
+                                    html.Label("Sliding window"),
+
+                                    dbc.InputGroup(
+                                        [
+                                            dbc.InputGroupAddon("Size of window", addon_type="prepend"),
+                                            dbc.Input(id="w",type="number"),
+                                        ],size="sm",className="window"
+                                    ),
+                                    
+                                    dbc.InputGroup(
+                                        [
+                                            dbc.InputGroupAddon("Window shift", addon_type="prepend"),
+                                            dbc.Input(id="wh",type="number"),
+                                        ],size="sm",className="window"
+                                    ),
+
+                                    dbc.InputGroup(
+                                        [
+                                            dbc.InputGroupAddon("Window exspansion", addon_type="prepend"),
+                                            dbc.Input(id="we",type="number"),
+                                        ],size="sm",className="window"
+                                    ),
+
+                                    dbc.InputGroup(
+                                        [
+                                            dbc.InputGroupAddon("Max size of window", addon_type="prepend"),
+                                            dbc.Input(id="wm",type="number"),
+                                        ],size="sm",className="window"
+                                    ),
+
+
+                                    #dbc.Input(placeholder="size of ngram",type="number"),
+                                    #html.H6("Size of ngram:"),
+                                    #dcc.Slider(id="n_size",min=1,max=9,value=1,marks={i:"{}".format(i)for i in range(1,10)}),
+                                    #html.H6("Split by:"),
+                                    #dcc.RadioItems(id='split',options=[{"label":"symbol","value":"symbol"},{"label":"word","value":"word"}],value="word"),
+                                    #html.H6("Boundary Condition:"),
+                                    #dcc.RadioItems(id='condition',options=[{"label":"no","value":"no"},{"label":"periodic","value":"periodic"},{"label":"ordinary","value":"ordinary"}],value="words"),
+                                    dbc.Button("Analyze", id="chain_button",color="primary",block=True),
+                                    html.Div(id="alert",children=[]),
+                                                                        #html.H6("Boundary Condition:"),
+                                    #dcc.RadioItems(id='condition',options=[{"label":"no","value":"no"},{"label":"periodic","value":"periodic"},{"label":"ordinary","value":"ordinary"}],value="words"),
+                                ]
+
+
+                                            ),
+                                dbc.CardHeader("Characteristics"),
+                                dbc.CardBody(
+                                    [
+                                        html.Div(id="lenght",children=["Lenght: ",]),
+                                        html.Div(id="vocabulary",children=["Vocabulary: ",]),
+                                        html.Div(id="chain_time",children=["Time: ",]),
+
+                                        html.Div(id="seve",
+                                             children=[dbc.Button("Save data",id="save",color="success",size="sm")]
+                                            ),
+
+
+                                    ]
+                                            )
+
+                            ],color="light",style={"margin-left":"10px","margin-top":"10px",}
+                                ),
+                        width={"size":3,"offset":0}
+                            ),
+                    dbc.Col(
+                            [
+                            dbc.Card(
+                                [
+                                     dt.DataTable(id='table',
+                                                columns=[{"name":i,"id":i}for i in ["ngram","F_i","R","alpha","goodnes"]],
+
+                                                style_data={'whiteSpace': 'normal','height': 'auto'},
+                                                 editable=False,
+                                                 filter_action="native",
+                                                 sort_action="native",
+                                                 #page_size=10,
+                                                                   #fixed_rows={'headers': True},
+                                                 style_cell={'whiteSpace': 'normal','height': 'auto','textAlign': 'right',},
+                                                             #'minWidth': 40, 'width': 95, 'maxWidth': 95},
+                                                 style_table={'height': 350, 'overflowY': 'auto',"overflowX":"none"}
+                                                )]
+                                ,style={"padding":"0%","margin-top":"10px","margin-right":"10px"}),
+                                dbc.Card(
+                                    [
+                                        dbc.CardHeader(
+                                            dbc.Tabs(
+                                                [
+                                                    dbc.Tab(label="distribution",tab_id="tab1"),
+                                                    dbc.Tab(label="flunctuacion",tab_id="tab2")
+                                                ],
+                                                id='card-tabs',
+                                                card=True,
+                                                active_tab="tab1"
+                                            )
+                                        ),
+                                        dbc.CardBody(dcc.Graph(id="fig"))
+
+                                    ]
+                                )
+                            ],
+                        width={"size":9}
+                            ),
+                                        ]
+                        )])
+from dash.dependencies import Input,Output,State
+app.layout=layout1
+
+
+@app.callback(Output("fig","figure"),
+              [Input("card-tabs","active_tab"),
+                Input("table","active_cell")
+               ])
+def tab_content(active_tab,active_cell):
+    global model,df,L
+    fig=go.Figure()
+    fig.update_layout(
+        margin=dict(l=0,r=0,t=0,b=0)
+    )
+    if active_tab=="tab1":
+        if active_cell:
+            #print(model[tuple(df['ngram'][active_cell['row']].split())].bool)
+            fig.add_trace(go.Scatter(x=np.array(range(L)),y=model[tuple(df['ngram'][active_cell['row']].split())].bool))
+            #print(fig)
+            return fig
+        else:
+            ##
+            return fig
+        return fig
+    else:
+        if active_cell:
+            fig.add_trace(
+                    go.Scatter(x=[*model[tuple(df['ngram'][active_cell['row']].split())].fa.keys()],
+                                     y=[*model[tuple(df['ngram'][active_cell['row']].split())].fa.values()],
+                                     mode='markers'))
+
+                    #go.Scatter(x=[*model[tuple(df['ngram'][active_cell['row']].split())].keys()],
+                    #                 y=model[tuple(df['ngram'][active_cell['row']].split())].temp_fa)
+                
+            fig.add_trace(go.Scatter(
+                                x=[*model[tuple(df['ngram'][active_cell['row']].split())].fa.keys()],
+                                y=model[tuple(df['ngram'][active_cell['row']].split())].temp_fa))
+            return fig
+        else:
+            return fig
+        return dash.no_update
+@app.callback([Output("seve","children")],
+              [Input("save","n_clicks")])
+def save(n):
+    if n is None :
+        return dash.no_update
+    else:
+        print("here")
+        global df
+        print(df)
+        writer=pd.ExcelWriter("output.xlsx")
+        df.to_excel(writer)
+        writer.save()
+        print("done")
+    return dash.no_update
+
+from sklearn.metrics import r2_score
+@app.callback([Output("w","value"),
+               Output("wh","value"),
+              # Output("we","value"),
+               Output("wm","value"),
+               Output("lenght","children"),],
+               [Input("corpus","value")])
+def calc_window(corpus):
+    if corpus is None:
+        return dash.no_update,dash.no_update,dash.no_update,dash.no_update
+    global L,data
+    with open("corpus/"+corpus) as f:
+        file=f.read()
+    data=remove_punctuation(file)
+    L=len(data.split())
+    wm=int(L/10)
+    w=int(wm/10)
+    return [w,w,wm,["Lenght: ",L]]
+@app.callback([Output("table","data"),Output("alert","children"),Output("vocabulary","children"),Output("chain_time","children")],
+              [Input("chain_button","n_clicks")],
+              [State("corpus","value"),
+               State("n_size","value"),
+               State("split","value"),
+               State("table","page_current"),
+               State("condition","value"),
+               State("f_min","value"),
+               State("w","value"),
+               State("wh","value"),
+               State("we","value"),
+               State("wm","value")])
+def update_table(n,corpus,n_size,split,table_state,condition,f_min,w,wh,we,wm):
+    
+    if n is None:
+        return dash.no_update,dash.no_update,dash.no_update,dash.no_update
+
+    #add alert corpus if not selected
+    if corpus is None :
+        return dash.no_update,dbc.Alert("Please choose corpus",color="danger",duration=2000,dismissable=False),dash.no_update,dash.no_update
+
+    print()
+    ###  MAKE MARKOV CHAIN ####
+    global data,L,V,model,ngram,df
+    #if n>1:
+    #del model
+    #with open("corpus/"+corpus) as f:
+    #    file=f.read()
+    #data=remove_punctuation(file)
+    start=time()
+    #fmin=4
+    #order=1
+    #split="word"
+    #option="obc"
+    #print(L)
+    make_markov_chain(data.split(),order=n_size,split=split)
+
+    
+    df=make_dataframe(model,L,f_min)
+
+    for index,ngram in enumerate(df['ngram']):
+        print(str(index)+" of "+str(len(df['ngram'])),end="\r")
+        
+        model[ngram].dt=calculate_distance(np.array(model[ngram].pos,dtype=np.uint8),L,condition)
+
+    #print(model[ngram].dt)
+
+    #print(df)
+    windows=list(range(w,wm,we))
+    fa(np.zeros(5),(1,3,4))
+    
+    def func(wind):
+        model[ngram].counts[wind],model[ngram].fa[wind]=fa(model[ngram].bool,(wind,wh,L))
+    for index,ngram in enumerate(df['ngram']):
+        print(str(index)+" of "+str(len(df['ngram'])),end="\r")
+        with ThreadPoolExecutor() as e:
+            e.map(func,windows)
+    #calculate_fa(df,model,w,wh,we,wm,L,condition)
+    ###
+    temp_b=[]
+
+   # temp_fi=[]
+    temp_R=[]
+    temp_error=[]
+    temp_ngram=[]
+
+    for ngram in df['ngram']:
+        model[ngram].temp_fa=[]
+        c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],maxfev=5000)
+        model[ngram].a=c[0]
+        model[ngram].b=c[1]
+        for w in model[ngram].fa.keys():
+            model[ngram].temp_fa.append(fit(w,model[ngram].a,model[ngram].b))
+        temp_error.append(round(r2_score([*model[ngram].fa.values()],model[ngram].temp_fa),5))
+        temp_b.append(round(c[1],7))
+        
+        if ngram.__class__ is tuple:
+            temp_ngram.append("  ".join(ngram))
+        temp_R.append(round(R(np.array(model[ngram].dt)),7))
+
+    if n_size>1:
+        df["ngram"]=temp_ngram
+    df['R']=temp_R
+    
+    #df['f_i']=temp_fi
+    df['alpha']=temp_b 
+    df['goodnes']=temp_error
+    #return [{"name":i,"id":i}for i in df.columns]
+    #print("chain time:",time()-start)
+    #print(df.to_dict("records"))
+    print(df)
+    return [df.to_dict("records"),dash.no_update,["Vocabulary: ",V],["Time: ",round(time()-start,6)]]
+
+
+import webbrowser
+if __name__=="__main__":
+    webbrowser.open("http://127.0.0.1:8050/")
+
+    app.run_server(debug=True)
+
+    #webbrowser.open("http://127.0.0.1:8050/")
+    #main()
+
+
+
+
+
+
+
 
 
 
@@ -322,265 +686,9 @@ def calculate_fa(df,model,*args):
 #    pass
 #
 
-import dash
-import dash_core_components as dcc
-import dash_html_components as html
-import dash_table as dt
-from os import listdir
 
 
-app =dash.Dash(__name__)
 
-corpuses=listdir("corpus/")
-colors={
-    "background":"#a1a1a1",
-    "text":"#a1a1a1"}
-
-import dash_bootstrap_components as dbc
-layout2=html.Div()
-
-# old layout was fun but not what i wanted
-#
-layout1=html.Div([
-                dbc.Row(
-                    [
-                    dbc.Col(
-                        dbc.Card(
-                            [
-                                dbc.CardHeader("Configuration:"),
-                                dbc.CardBody(
-                                [
-                                    html.Label("Choose corpus:"),
-                                    dcc.Dropdown(id="corpus",options=[{"label":i,"value":i}for i in corpuses]),
-                                    
-                                    dbc.InputGroup(
-                                        [
-                                            dbc.InputGroupAddon("Size of ngram", addon_type="prepend"),
-                                            dbc.Input(id="n_size",type="number"),
-                                        ],size="sm",className="config"
-                                    ),
-    
-                                    dbc.InputGroup(
-                                        [
-                                            dbc.InputGroupAddon("Split by", addon_type="prepend"),
-                                            dbc.Select(
-                                                id="split",
-                                                options=[
-                                                    {"label":"symbol","value":"symbol"},
-                                                    {"label":"word","value":"word"}
-                                                ],
-                                                value="word"
-                                            )
-                                        ],size="sm",className="config"
-                                    ),
-
-                                    dbc.InputGroup(
-                                        [
-                                            #dbc.InputGroupAddon("Boundary Condition:", addon_type="append"),
-                                            dbc.Select(
-                                                id="condition",
-                                                options=[
-                                                    {"label":"no","value":"no"},
-                                                    {"label":"periodic","value":"periodic"},
-                                                    {"label":"ordinary","value":"ordinary"}
-                                                ],
-                                                value="no"
-                                            ),
-                                            dbc.InputGroupAddon("Boundary Condition:", addon_type="append"),
-                                        ],size="sm",className="config"
-                                    ),
-                                    html.Label("Sliding window"),
-
-                                    dbc.InputGroup(
-                                        [
-                                            dbc.InputGroupAddon("Size of window", addon_type="prepend"),
-                                            dbc.Input(id="w",type="number"),
-                                        ],size="sm",className="window"
-                                    ),
-                                    
-                                    dbc.InputGroup(
-                                        [
-                                            dbc.InputGroupAddon("Window shift", addon_type="prepend"),
-                                            dbc.Input(id="wh",type="number"),
-                                        ],size="sm",className="window"
-                                    ),
-
-                                    dbc.InputGroup(
-                                        [
-                                            dbc.InputGroupAddon("Window exspansion", addon_type="prepend"),
-                                            dbc.Input(id="we",type="number"),
-                                        ],size="sm",className="window"
-                                    ),
-
-                                    dbc.InputGroup(
-                                        [
-                                            dbc.InputGroupAddon("Max size of window", addon_type="prepend"),
-                                            dbc.Input(id="wm",type="number"),
-                                        ],size="sm",className="window"
-                                    ),
-
-
-                                    #dbc.Input(placeholder="size of ngram",type="number"),
-                                    #html.H6("Size of ngram:"),
-                                    #dcc.Slider(id="n_size",min=1,max=9,value=1,marks={i:"{}".format(i)for i in range(1,10)}),
-                                    #html.H6("Split by:"),
-                                    #dcc.RadioItems(id='split',options=[{"label":"symbol","value":"symbol"},{"label":"word","value":"word"}],value="word"),
-                                    #html.H6("Boundary Condition:"),
-                                    #dcc.RadioItems(id='condition',options=[{"label":"no","value":"no"},{"label":"periodic","value":"periodic"},{"label":"ordinary","value":"ordinary"}],value="words"),
-                                    dbc.Button("Analyze", id="chain_button",color="primary",block=True),
-                                    html.Div(id="alert",children=[])
-
-                                    #html.H6("Boundary Condition:"),
-                                    #dcc.RadioItems(id='condition',options=[{"label":"no","value":"no"},{"label":"periodic","value":"periodic"},{"label":"ordinary","value":"ordinary"}],value="words"),
-                                ]
-
-
-                                            ),
-                                dbc.CardHeader("Characteristics"),
-                                dbc.CardBody(
-                                    [
-                                        html.Div(id="lenght",children=["Lenght: ",]),
-                                        html.Div(id="vocabulary",children=["Vocabulary: ",]),
-                                        html.Div(id="chain_time",children=["Time: ",])
-
-
-                                    ]
-                                            )
-
-                            ],color="light",style={"margin-left":"10px","margin-top":"10px",}
-                                ),
-                        width={"size":3,"offset":0}
-                            ),
-                    dbc.Col(
-                            dbc.Card(
-                                    dt.DataTable(id='table',
-                                                columns=[{"name":i,"id":i}for i in ["ngram","F_i","f_i","R","alpha"]],
-
-                                                style_data={'whiteSpace': 'normal','height': 'auto'},
-                                                 editable=False,
-                                                 filter_action="native",
-                                                 sort_action="native",
-                                                 #page_size=10,
-                                                                   #fixed_rows={'headers': True},
-                                                 style_cell={'whiteSpace': 'normal','height': 'auto','textAlign': 'right',},
-                                                             #'minWidth': 40, 'width': 95, 'maxWidth': 95},
-                                                 style_table={'height': 350, 'overflowY': 'auto',"overflowX":"none"}
-                                                )
-                                ,style={"padding":"5%","margin-top":"10px","margin-right":"10px"}),
-                        width={"size":9}
-                            ),
-                                        ]
-                        )])
-from dash.dependencies import Input,Output,State
-app.layout=layout1
-
-@app.callback([Output("w","value"),
-               Output("wh","value"),
-              # Output("we","value"),
-               Output("wm","value"),
-               Output("lenght","children"),],
-               [Input("corpus","value")])
-def calc_window(corpus):
-    if corpus is None:
-        return dash.no_update,dash.no_update,dash.no_update,dash.no_update
-    global L,data
-    with open("corpus/"+corpus) as f:
-        file=f.read()
-    data=remove_punctuation(file)
-    L=len(data.split())
-    wm=int(L/10)
-    w=int(wm/10)
-    return [w,w,wm,["Lenght: ",L]]
-@app.callback([Output("table","data"),Output("alert","children"),Output("vocabulary","children"),Output("chain_time","children")],
-              [Input("chain_button","n_clicks")],
-              [State("corpus","value"),
-               State("n_size","value"),
-               State("split","value"),
-               State("table","page_current"),
-               State("condition","value"),
-               State("w","value"),
-               State("wh","value"),
-               State("we","value"),
-               State("wm","value")])
-def update_table(n,corpus,n_size,split,table_state,condition,w,wh,we,wm):
-    
-    if n is None:
-        return dash.no_update,dash.no_update,dash.no_update,dash.no_update
-
-    #add alert corpus if not selected
-    if corpus is None :
-        return dash.no_update,dbc.Alert("Please choose corpus",color="danger",duration=2000,dismissable=False),dash.no_update,dash.no_update
-
-    print()
-    ###  MAKE MARKOV CHAIN ####
-    global data,L,V,model,ngram
-    #if n>1:
-    #del model
-    #with open("corpus/"+corpus) as f:
-    #    file=f.read()
-    #data=remove_punctuation(file)
-    start=time()
-    #fmin=4
-    #order=1
-    #split="word"
-    #option="obc"
-    print(L)
-    make_markov_chain(data.split(),order=n_size,split=split)
-
-    
-    print(V)
-    print(L)
-    input()
-    df=make_dataframe(model,L)
-    print(df)
-    windows=list(range(w,wm,we))
-    fa(np.zeros(5),(1,3,4))
-    
-    def func(wind):
-        model[ngram].counts[wind],model[ngram].fa[wind]=fa(model[ngram].bool,(wind,wh,L))
-    for index,ngram in enumerate(df['ngram']):
-        print(str(index)+" of "+str(len(df['ngram'])),end="\r")
-        with ThreadPoolExecutor() as e:
-            e.map(func,windows)
-    #calculate_fa(df,model,w,wh,we,wm,L,condition)
-    ###
-    temp_b=[]
-
-   # temp_fi=[]
-    temp_R=[]
-    for ngram in df['ngram']:
-        try:
-            c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],maxfev=5000)
-            model[ngram].a=c[0]
-            model[ngram].b=c[1]
-            temp_b.append(round(c[1],7))
-            #temp_fi.append(model[ngram].F_i/L)
-            temp_R.append(round(R(np.array(model[ngram].pos)),7))
-        except KeyError:
-            try:
-                ngram=tuple(ngram.split())
-                c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],maxfev=5000)
-                model[ngram].a=c[0]
-                model[ngram].b=c[1]
-                temp_b.append(round(c[1],7))
-                #temp_fi.append(model[ngram].F_i/L)
-                temp_R.append(round(R(np.array(model[ngram].pos)),7))
-            
-            except ValueError:
-                print(model[ngram])
-                print(model[ngram].fa)
-                input()
-                temp_b.append(0)
-                temp_R.append(R(np.array(model[ngram].pos)))
-            
-
-    df['R']=temp_R
-    #df['f_i']=temp_fi
-    df['alpha']=temp_b    #return [{"name":i,"id":i}for i in df.columns]
-    print("chain time:",time()-start)
-    #print(df.to_dict("records"))
-    print(df)
-    return [df.to_dict("records"),dash.no_update,["Vocabulary: ",V],["Time: ",round(time()-start,6)]]
 
 #@app.callback([Output("table","data")],
 #              [Input("wh","value")])
@@ -683,30 +791,6 @@ def update_table(n,corpus,n_size,split,table_state,condition,w,wh,we,wm):
     #return df.to_dict(),[{"name":i,"id":i}for i in df.columns]
     ### CALCULATE FA ###
  #       pass
-import webbrowser
-if __name__=="__main__":
-    webbrowser.open("http://127.0.0.1:8050/")
-
-    app.run_server(debug=True)
-
-    #webbrowser.open("http://127.0.0.1:8050/")
-    #main()
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
-
 
 
 
