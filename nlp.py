@@ -14,14 +14,22 @@ make better short
 
 
 
-2. add fmin 
-3. fix analyze for n>1(hcekc fa) + add condition
-4. add graph for fa
+2. add fmin  +
+3. fix analyze for n>1(hcekc fa) + add condition +
+4. add graph for fa +
+
+
+5. add log po yaxec
+6.add rank and others +
+7.add markov chain graph
+8.chekc R  
+9. check what is wrong with distribution graph +
+
 """
 
 
 
-
+import unicodedata
 
 
 
@@ -35,8 +43,10 @@ def remove_punctuation(data):
     temp=[]
     for i in data:
         if i in punctuation:
-            if i == "'" or i == '-'or i==' ':
-                temp.append(i.lower())
+            
+            if i == '\xa0': #or i == '-'or i==' ':
+                #temp.append(i.lower())
+                continue
         else:
             temp.append(i.lower())
     return "".join(temp)
@@ -70,12 +80,13 @@ class Ngram (dict):
     def hist(self):
         plt.bar(self.keys(),self.values())
         plt.show()
-
+    
 def make_dataframe(model,L,fmin=0):
 
     filtred_data=list(filter(lambda x:model[x].F_i >=fmin,model))
-    data={"ngram":[],
-          "F_i":np.empty(len(filtred_data),dtype=np.dtype(int))}
+    data={"rank":np.empty(len(filtred_data)),
+          "ngram":[],
+          "ƒ":np.empty(len(filtred_data),dtype=np.dtype(int))}
 
     #print(data['ngram'][0])
     for i,ngram in enumerate(filtred_data):
@@ -83,7 +94,8 @@ def make_dataframe(model,L,fmin=0):
         #    data["ngram"].append("  ".join(ngram))
         #else:
         data["ngram"].append(ngram)
-        data["F_i"][i]=len(model[ngram].pos)
+        data["ƒ"][i]=len(model[ngram].pos)
+        
         #data["f_i"][i]=round(model[ngram].F_i/L,7)
     return pd.DataFrame(data=data)
 #L=0#
@@ -93,12 +105,6 @@ def make_markov_chain(data,order=1,split='word'):
     global model,L,V
     model=dict()
 
-    if split=="symbol":
-        temp=[]
-        for word in data:
-            for symbol in word:
-                temp.append(symbol)
-        data=temp
     L=len(data)-order
     if order>1:
         for i in range(L):
@@ -185,6 +191,8 @@ def mse(x):
 
 @jit(nopython=True)
 def R(x):
+    if len(x)==1:
+        return 0.0
     t=np.mean(x)
     ts=np.mean(x**2)
     return np.sqrt(ts-(t**2))/t
@@ -232,7 +240,7 @@ layout1=html.Div([
                                 dbc.CardBody(
                                 [
 
-                                    html.Label("Choose corpus:"),
+                                    html.Label("Choose file:"),
                                     html.Div(
                                         [
                                     dcc.Dropdown(id="corpus",options=[{"label":i,"value":i}for i in corpuses]),
@@ -251,7 +259,9 @@ layout1=html.Div([
                                                 id="split",
                                                 options=[
                                                     {"label":"symbol","value":"symbol"},
-                                                    {"label":"word","value":"word"}
+                                                    {"label":"word","value":"word"},
+                                                    {"label":"letter","value":"letter"}
+                                                    
                                                 ],
                                                 value="word"
                                             )
@@ -354,9 +364,9 @@ layout1=html.Div([
                                     [
                                     dbc.Spinner(
                                      dt.DataTable(id='table',
-                                                columns=[{"name":i,"id":i}for i in ["ngram","F_i","R","alpha","goodnes"]],
+                                                columns=[{"name":i,"id":i}for i in ['rank',"ngram","ƒ","R","a","b","goodness"]],
 
-                                                style_data={'whiteSpace': 'normal','height': 'auto'},
+                                                style_data={'whiteSpace': 'auto','height': 'auto'},
                                                  editable=False,
                                                  filter_action="native",
                                                  sort_action="native",
@@ -369,7 +379,7 @@ layout1=html.Div([
                                                              #"font-family":"sans-serif"
                                                              },
                                                              #'minWidth': 40, 'width': 95, 'maxWidth': 95},
-                                                 style_table={'height': 350, 'overflowY': 'auto',"overflowX":"none"}
+                                                 style_table={'height': 450, 'overflowY': 'auto',"overflowX":"none"}
                                                 ))]
                                 ,style={"padding":"0%","margin-top":"10px","margin-right":"10px"}),
                                 dbc.Card(
@@ -409,15 +419,24 @@ layout1=html.Div([
                         )])
 from dash.dependencies import Input,Output,State
 app.layout=layout1
-
+df=None
 import plotly.express as px
 @app.callback(Output("fig","figure"),
               [Input("card-tabs","active_tab"),
                 Input("table","active_cell"),
+               Input("table","derived_virtual_selected_rows"),
+               Input("table","derived_virtual_indices"),
                Input("scale","value")
                ],[State("n_size","value")])
-def tab_content(active_tab,active_cell,scale,n):
+def tab_content(active_tab,active_cell,row_ids,ids,scale,n):
+    
     global model,df,L
+    if df is None:
+        return dash.no_update
+    if ids is None:
+        return dash.no_update
+
+    df=df.reindex(pd.Index(ids))
     fig=go.Figure()
     fig.update_layout(
         margin=dict(l=0,r=0,t=0,b=0)
@@ -426,22 +445,22 @@ def tab_content(active_tab,active_cell,scale,n):
         if active_cell:
             ngram=''
             if n>1:
-                ngram=tuple(df['ngram'][active_cell['row']].split())
+                print(df['ngram'][0])
+                ngram=tuple(df['ngram'][ids[active_cell['row']]].split())
             else:
-                ngram=df['ngram'][active_cell['row']]
+                ngram=df['ngram'][ids[active_cell['row']]]
             fig.add_trace(go.Scatter(x=np.array(range(L)),y=model[ngram].bool))
             fig.update_xaxes(type=scale)
             return fig
         else:
-            ##
             return fig
         return fig
     if active_tab=="tab2":
         if active_cell:
             if n>1:
-                ngram=tuple(df['ngram'][active_cell['row']].split())
+                ngram=tuple(df['ngram'][ids[active_cell['row']]].split())
             else:
-                ngram=df['ngram'][active_cell['row']]
+                ngram=df['ngram'][ids[active_cell['row']]]
             fig.add_trace(
                     go.Scatter(x=[*model[ngram].fa.keys()],
                                      y=[*model[ngram].fa.values()],
@@ -452,6 +471,7 @@ def tab_content(active_tab,active_cell,scale,n):
                                 y=model[ngram].temp_fa,
                                 name="fit"))
             fig.update_xaxes(type=scale)
+            fig.update_yaxes(type=scale)
             return fig
         else:
             return fig
@@ -459,15 +479,15 @@ def tab_content(active_tab,active_cell,scale,n):
         hover_data=[]
         if active_cell:
             if n>1:
-                ngram=tuple(df['ngram'][active_cell['row']].split())
+                ngram=tuple(df['ngram'][ids[active_cell['row']]].split())
             else:
-                ngram=df['ngram'][active_cell['row']]
+                ngram=df['ngram'][ids[active_cell['row']]]
             
             for data in df['ngram']:
                 hover_data.append("".join(data))
-            fig.add_trace(go.Scatter(x=df["R"],y=df["alpha"],mode="markers",text=hover_data))
+            fig.add_trace(go.Scatter(x=df["R"],y=df["b"],mode="markers",text=hover_data))
             fig.add_trace(go.Scatter(x=[df['R'][active_cell['row']]],
-                                     y=[df["alpha"][active_cell['row']]],
+                                     y=[df["b"][active_cell['row']]],
                                      mode="markers",
                                      text=' '.join(ngram),
                                      marker=dict(
@@ -475,12 +495,16 @@ def tab_content(active_tab,active_cell,scale,n):
                                          color="red"
                                      ))) 
             fig.update_layout(showlegend=False)
+            fig.update_yaxes(type=scale)
+            fig.update_xaxes(type=scale)
             return fig
         else:
             
             for data in df["ngram"]:
                 hover_data.append("".join(data))
-            fig.add_trace(go.Scatter(x=df["R"],y=df["alpha"],mode="markers",text=hover_data))
+            fig.add_trace(go.Scatter(x=df["R"],y=df["b"],mode="markers",text=hover_data))
+            fig.update_yaxes(type=scale)
+            fig.update_xaxes(type=scale)
         return fig        
 
         return dash.no_update
@@ -500,20 +524,52 @@ def save(n):
     return dash.no_update
 
 from sklearn.metrics import r2_score
+
+
 @app.callback([Output("w","value"),
                Output("wh","value"),
               # Output("we","value"),
                Output("wm","value"),
                Output("lenght","children"),],
-               [Input("corpus","value")])
-def calc_window(corpus):
+               [Input("corpus","value")],Input("split","value"))
+def calc_window(corpus,split):
     if corpus is None:
         return dash.no_update,dash.no_update,dash.no_update,dash.no_update
     global L,data
+    
     with open("corpus/"+corpus) as f:
         file=f.read()
-    data=remove_punctuation(file)
-    L=len(data.split())
+        file=unicodedata.normalize("NFKD",file)
+    temp=[]
+    if split =="letter":
+        data=remove_punctuation(file)
+        for word in data:
+            for i in word:
+                if i == ' ':
+                    #temp.append("space")
+                    continue
+                temp.append(i)
+        #temp.replace(" ","space")
+        data=temp
+    if split =="symbol":
+        data=file
+        for i in data:
+            if i ==" ":
+                temp.append("space")
+            else:
+                temp.append(i)
+        #temp.replace(" ","space")
+        data=temp
+        
+    if split =="word":
+        data=remove_punctuation(file)
+        data.replace(" ","space")
+        data=data.split()
+        
+
+
+    
+    L=len(data)
     wm=int(L/10)
     w=int(wm/10)
     return [w,w,wm,["Lenght: ",L]]
@@ -537,7 +593,7 @@ def update_table(n,progress,corpus,n_size,split,table_state,condition,f_min,w,wh
         return dash.no_update,dash.no_update,dash.no_update,dash.no_update
 
     #add alert corpus if not selected
-    if corpus is None :
+    if corpus is None:
         return dash.no_update,dbc.Alert("Please choose corpus",color="danger",duration=2000,dismissable=False),dash.no_update,dash.no_update
 
     
@@ -547,18 +603,20 @@ def update_table(n,progress,corpus,n_size,split,table_state,condition,f_min,w,wh
     #del model
     #with open("corpus/"+corpus) as f:
     #    file=f.read()
-    #data=remove_punctuation(file)
+    #if split =="letter":
+    #    data=remove_punctuation(file)
     start=time()
     #fmin=4
     #order=1
     #split="word"
     #option="obc"
     #print(L)
-    make_markov_chain(data.split(),order=n_size,split=split)
-
+    #print(data)
+    make_markov_chain(data,order=n_size,split=split)
+    #print(model.keys())
     
     df=make_dataframe(model,L,f_min)
-    print(progress)
+    #print(progress)
     progress=50
     for index,ngram in enumerate(df['ngram']):
         print(str(index)+" of "+str(len(df['ngram'])),end="\r")
@@ -585,19 +643,23 @@ def update_table(n,progress,corpus,n_size,split,table_state,condition,f_min,w,wh
     temp_R=[]
     temp_error=[]
     temp_ngram=[]
+    temp_a=[]
 
     for ngram in df['ngram']:
         model[ngram].temp_fa=[]
-        c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],maxfev=5000)
+        c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],method='lm',maxfev=5000)
         model[ngram].a=c[0]
         model[ngram].b=c[1]
         for w in model[ngram].fa.keys():
             model[ngram].temp_fa.append(fit(w,model[ngram].a,model[ngram].b))
         temp_error.append(round(r2_score([*model[ngram].fa.values()],model[ngram].temp_fa),5))
         temp_b.append(round(c[1],7))
+        temp_a.append(round(c[0],7))
+
         
         if ngram.__class__ is tuple:
             temp_ngram.append("  ".join(ngram))
+        #print(np.array(model[ngram].dt))
         temp_R.append(round(R(np.array(model[ngram].dt)),7))
 
     if n_size>1:
@@ -605,12 +667,20 @@ def update_table(n,progress,corpus,n_size,split,table_state,condition,f_min,w,wh
     df['R']=temp_R
     
     #df['f_i']=temp_fi
-    df['alpha']=temp_b 
-    df['goodnes']=temp_error
-    #return [{"name":i,"id":i}for i in df.columns]
+    df['b']=temp_b 
+    df['a']=temp_a
+    df['goodness']=temp_error
+
+    df=df.sort_values(by="ƒ",ascending=False)
+    df['rank']=range(1,len(temp_R)+1)
+    df=df.set_index(pd.Index(np.arange(len(df))))
+    print(df)
+    #print("here",df.index)
+    #print(model)
+        #return [{"name":i,"id":i}for i in df.columns]
     #print("chain time:",time()-start)
     #print(df.to_dict("records"))
-   # print(df)
+   # print()
     return [df.to_dict("records"),dash.no_update,["Vocabulary: ",V],["Time: ",round(time()-start,6)]]
 
 
