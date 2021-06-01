@@ -19,10 +19,10 @@ make better short
 4. add graph for fa +
 
 
-5. add log po yaxec
+5. add log po yaxec +
 6.add rank and others +
 7.add markov chain graph
-8.chekc R  
+8.chekc R  +-
 9. check what is wrong with distribution graph +
 
 """
@@ -37,6 +37,8 @@ import unicodedata
 #with open("corpus/lotr_en.txt") as f:
 #    file=f.read()
 from time import asctime
+
+from dash_core_components.Graph import Graph
 from libs import *
 #print(file)
 def remove_punctuation(data):
@@ -356,32 +358,51 @@ layout1=html.Div([
                             ],color="light",style={"margin-left":"10px","margin-top":"10px",}
                                 ),
                         width={"size":3,"offset":0}
-                            ),
+                        ),
                     dbc.Col(
                             [
                             dbc.Card(
-                                    
-                                    [
-                                    dbc.Spinner(
-                                     dt.DataTable(id='table',
-                                                columns=[{"name":i,"id":i}for i in ['rank',"ngram","ƒ","R","a","b","goodness"]],
+                                [
+                                dbc.CardHeader(
+                                    dbc.Tabs(
+                                        [
+                                            dbc.Tab(label="DataTable",tab_id="data_table"),
+                                            dbc.Tab(label="MarkovChain",tab_id="markov_chain")
+                                        ],
+                                        id="dataframe",
+                                        card=True,
+                                        active_tab="data_table"
+                                             )
 
+                                             ),
+                                dbc.CardBody(
+                                    [
+                                        html.Div(id="box_tab",
+                                                 style={"display":"none"},
+                                                 children=[dbc.Spinner(dt.DataTable(
+                                                    id="table",
+                                                columns=[{"name":i,"id":i}for i in ['rank',"ngram","ƒ","R","a","b","goodness"]],
                                                 style_data={'whiteSpace': 'auto','height': 'auto'},
-                                                 editable=False,
-                                                 filter_action="native",
-                                                 sort_action="native",
-                                                 #page_size=10,
-                                                                   #fixed_rows={'headers': True},
-                                                 style_cell={'whiteSpace': 'normal',
+                                                editable=False,
+                                                filter_action="native",
+                                                sort_action="native",
+                                                page_size=30,
+                                                fixed_rows={'headers': True},
+                                                style_cell={'whiteSpace': 'normal',
                                                              'height': 'auto',
-                                                             'textAlign': 'right',
+                                                            'textAlign': 'right',
                                                              "fontSize":15,
-                                                             #"font-family":"sans-serif"
-                                                             },
-                                                             #'minWidth': 40, 'width': 95, 'maxWidth': 95},
-                                                 style_table={'height': 450, 'overflowY': 'auto',"overflowX":"none"}
-                                                ))]
-                                ,style={"padding":"0%","margin-top":"10px","margin-right":"10px"}),
+                                                            "font-family":"sans-serif"},#'minWidth': 40, 'width': 95, 'maxWidth': 95},
+                                            style_table={'height': 420, 'overflowY': 'auto',"overflowX":"none"}
+                                                                                    ))]),
+                                        html.Div(id="box_chain",
+                                                 style={"display":"none"},
+                                                 children=[dbc.Spinner(dcc.Graph(id="chain"))])
+
+
+                                     ]
+                                             )
+                                ],style={"margin-right":"10px","margin-top":"10px"}),
                                 dbc.Card(
                                     [
                                         dbc.CardHeader(
@@ -406,7 +427,7 @@ layout1=html.Div([
                                                 value="linear"
 
                                             ),
-                                            dcc.Graph(id="fig")
+                                            dcc.Graph(id="graphs")
 
                                         ])
 
@@ -421,7 +442,248 @@ from dash.dependencies import Input,Output,State
 app.layout=layout1
 df=None
 import plotly.express as px
-@app.callback(Output("fig","figure"),
+from sklearn.metrics import r2_score
+import networkx as nx
+
+@app.callback([Output("w","value"),
+               Output("wh","value"),
+              # Output("we","value"),
+               Output("wm","value"),
+               Output("lenght","children"),],
+               [Input("corpus","value")],Input("split","value"))
+def calc_window(corpus,split):
+    if corpus is None:
+        return dash.no_update,dash.no_update,dash.no_update,dash.no_update
+    global L,data
+    
+    with open("corpus/"+corpus) as f:
+        file=f.read()
+        file=unicodedata.normalize("NFKD",file)
+    temp=[]
+    if split =="letter":
+        data=remove_punctuation(file)
+        for word in data:
+            for i in word:
+                if i == ' ':
+                    #temp.append("space")
+                    continue
+                temp.append(i)
+        #temp.replace(" ","space")
+        data=temp
+    if split =="symbol":
+        data=file
+        for i in data:
+            if i ==" ":
+                temp.append("space")
+            else:
+                temp.append(i)
+        #temp.replace(" ","space")
+        data=temp
+        
+    if split =="word":
+        data=remove_punctuation(file)
+        data.replace(" ","space")
+        data=data.split()
+        
+
+
+    
+    L=len(data)
+    wm=int(L/10)
+    w=int(wm/10)
+    return [w,w,wm,["Lenght: ",L]]
+@app.callback([Output("table","data"),Output("chain","figure"),Output("box_tab","style"),Output("box_chain","style"),Output("alert","children"),Output("vocabulary","children"),Output("chain_time","children")],
+              [Input("chain_button","n_clicks"),
+               Input("progress","value"),
+               Input("dataframe","active_tab")],
+              [State("corpus","value"),
+               State("n_size","value"),
+               State("split","value"),
+               State("condition","value"),
+               State("f_min","value"),
+               State("w","value"),
+               State("wh","value"),
+               State("we","value"),
+               State("wm","value"),
+               ])
+def update_table(n,progress,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm):
+    
+    
+    global data,L,V,model,ngram,df
+    if dataframe=="markov_chain":
+
+        if n is None:
+            
+            return dash.no_update,dash.no_update,{"display":"none"},{"display":'inline'},dash.no_update,dash.no_update,dash.no_update
+
+        #add alert corpus if not selected
+        if corpus is None:
+            return dash.no_updata,dash.no_update,{"display":"none"},{"display":"inline"},dbc.Alert("Please choose corpus",color="danger",duration=2000,dismissable=False),dash.no_update,dash.no_update
+
+        
+       ## make markov chain graph ###
+        g=nx.MultiGraph()
+        temp={}
+
+        for ngram in df['ngram']:
+            if n_size>1:
+                ngram=tuple(ngram.split())
+            
+            g.add_node(ngram)
+            temp[ngram[0]]=ngram
+  
+        for node in g.nodes():
+            for i in model[node]:
+                if i in temp:
+                    g.add_edge(node,temp[i],weight=model[node][i])
+         
+
+
+        pos=nx.spring_layout(g)
+
+        edge_x = []
+        edge_y = []
+        for edge in g.edges():
+            x0,y0=pos[edge[0]]
+            x1,y1=pos[edge[1]]
+            edge_x.append(x0)
+            edge_x.append(x1)
+            edge_x.append(None)
+            edge_y.append(y0)
+            edge_y.append(y1)
+            edge_y.append(None)
+        edge_trace = go.Scatter(
+            x=edge_x, y=edge_y,
+            line=dict(width=0.5, color='#888'),
+            hoverinfo='none',
+            mode='lines')
+
+        node_x = []
+        node_y = []
+        for node in g.nodes():
+            x,y=pos[node]
+            node_x.append(x)
+            node_y.append(y)
+        node_trace = go.Scatter(
+            x=node_x, y=node_y,
+            mode='markers',
+            hoverinfo='text',
+            marker=dict(
+                showscale=True,
+                # colorscale options
+                #'Greys' | 'YlGnBu' | 'Greens' | 'YlOrRd' | 'Bluered' | 'RdBu' |
+                #'Reds' | 'Blues' | 'Picnic' | 'Rainbow' | 'Portland' | 'Jet' |
+                #'Hot' | 'Blackbody' | 'Earth' | 'Electric' | 'Viridis' |
+                colorscale='YlGnBu',
+                reversescale=True,
+                color=[],
+                size=10,
+                colorbar=dict(
+                    thickness=15,
+                    title='Node Connections',
+                    xanchor='left',
+                    titleside='right'
+                ),
+                line_width=2))
+        node_adjacencies = []
+        node_text = []
+
+        for node, adjacencies in enumerate(g.adjacency()):
+            node_adjacencies.append(len(adjacencies[1]))
+            if n_size>1:
+                node_text.append(" ".join(adjacencies[0])+'<br>connections: '+str(len(adjacencies[1])))
+                continue
+            node_text.append("".join(adjacencies[0])+'<br>connections: '+str(len(adjacencies[1])))
+
+        node_trace.marker.color = node_adjacencies
+        node_trace.text = node_text
+        fig = go.Figure(data=[edge_trace, node_trace],
+                     layout=go.Layout(
+                        
+                       showlegend=False,
+                        hovermode='closest',
+                        margin=dict(b=0,l=0,r=0,t=0),
+                        annotations=[ dict(
+                          
+                            showarrow=True,
+                            xref="paper", yref="paper",
+                            x=0.005, y=-0.002 ) ],
+                        xaxis=dict(showgrid=False, zeroline=False, showticklabels=False),
+                        yaxis=dict(showgrid=False, zeroline=False, showticklabels=False))
+                        )
+
+
+
+
+        return dash.no_update,fig,{"display":"none"},{"display":'inline'},dash.no_update,dash.no_update,dash.no_update
+    if dataframe == "data_table":
+    
+        if n is None:
+            
+            return dash.no_update,dash.no_update,{"display":'inline'},{"display":"none"},dash.no_update,dash.no_update,dash.no_update
+
+        #add alert corpus if not selected
+        if corpus is None:
+            return dash.no_updata,dash.no_update,{"display":"inline"},{"display":"none"},dbc.Alert("Please choose corpus",color="danger",duration=2000,dismissable=False),dash.no_update,dash.no_update
+
+
+        ###  MAKE MARKOV CHAIN ####
+        start=time()
+        make_markov_chain(data,order=n_size,split=split)
+        df=make_dataframe(model,L,f_min)
+        for index,ngram in enumerate(df['ngram']):
+            print(str(index)+" of "+str(len(df['ngram'])),end="\r")
+            model[ngram].dt=calculate_distance(np.array(model[ngram].pos,dtype=np.uint8),L,condition)
+        windows=list(range(w,wm,we))
+        fa(np.zeros(5),(1,3,4))
+        def func(wind):
+            model[ngram].counts[wind],model[ngram].fa[wind]=fa(model[ngram].bool,(wind,wh,L))
+        for index,ngram in enumerate(df['ngram']):
+            print(str(index)+" of "+str(len(df['ngram'])),end="\r")
+            with ThreadPoolExecutor() as e:
+                e.map(func,windows)
+        #calculate_fa(df,model,w,wh,we,wm,L,condition)
+        ###
+        temp_b=[]
+
+        temp_R=[]
+        temp_error=[]
+        temp_ngram=[]
+        temp_a=[]
+
+        for ngram in df['ngram']:
+            model[ngram].temp_fa=[]
+            c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],method='lm',maxfev=5000)
+            model[ngram].a=c[0]
+            model[ngram].b=c[1]
+            for w in model[ngram].fa.keys():
+                model[ngram].temp_fa.append(fit(w,model[ngram].a,model[ngram].b))
+            temp_error.append(round(r2_score([*model[ngram].fa.values()],model[ngram].temp_fa),5))
+            temp_b.append(round(c[1],7))
+            temp_a.append(round(c[0],7))
+
+            
+            if ngram.__class__ is tuple:
+                temp_ngram.append("  ".join(ngram))
+            #print(np.array(model[ngram].dt))
+            temp_R.append(round(R(np.array(model[ngram].dt)),7))
+
+        if n_size>1:
+            df["ngram"]=temp_ngram
+        df['R']=temp_R
+        df['b']=temp_b 
+        df['a']=temp_a
+        df['goodness']=temp_error
+
+        df=df.sort_values(by="ƒ",ascending=False)
+        df['rank']=range(1,len(temp_R)+1)
+        df=df.set_index(pd.Index(np.arange(len(df))))
+        print(df)
+        
+        #table.data=df.to_dict("records")
+        return [df.to_dict("record"),dash.no_update,{"display":"inline"},{"display":"none"},dash.no_update,["Vocabulary: ",V],["Time: ",round(time()-start,6)]]
+
+@app.callback(Output("graphs","figure"),
               [Input("card-tabs","active_tab"),
                 Input("table","active_cell"),
                Input("table","derived_virtual_selected_rows"),
@@ -429,7 +691,6 @@ import plotly.express as px
                Input("scale","value")
                ],[State("n_size","value")])
 def tab_content(active_tab,active_cell,row_ids,ids,scale,n):
-    
     global model,df,L
     if df is None:
         return dash.no_update
@@ -523,166 +784,6 @@ def save(n):
         print("done")
     return dash.no_update
 
-from sklearn.metrics import r2_score
-
-
-@app.callback([Output("w","value"),
-               Output("wh","value"),
-              # Output("we","value"),
-               Output("wm","value"),
-               Output("lenght","children"),],
-               [Input("corpus","value")],Input("split","value"))
-def calc_window(corpus,split):
-    if corpus is None:
-        return dash.no_update,dash.no_update,dash.no_update,dash.no_update
-    global L,data
-    
-    with open("corpus/"+corpus) as f:
-        file=f.read()
-        file=unicodedata.normalize("NFKD",file)
-    temp=[]
-    if split =="letter":
-        data=remove_punctuation(file)
-        for word in data:
-            for i in word:
-                if i == ' ':
-                    #temp.append("space")
-                    continue
-                temp.append(i)
-        #temp.replace(" ","space")
-        data=temp
-    if split =="symbol":
-        data=file
-        for i in data:
-            if i ==" ":
-                temp.append("space")
-            else:
-                temp.append(i)
-        #temp.replace(" ","space")
-        data=temp
-        
-    if split =="word":
-        data=remove_punctuation(file)
-        data.replace(" ","space")
-        data=data.split()
-        
-
-
-    
-    L=len(data)
-    wm=int(L/10)
-    w=int(wm/10)
-    return [w,w,wm,["Lenght: ",L]]
-@app.callback([Output("table","data"),Output("alert","children"),Output("vocabulary","children"),Output("chain_time","children")],
-              [Input("chain_button","n_clicks"),
-               Input("progress","value")],
-              [State("corpus","value"),
-               State("n_size","value"),
-               State("split","value"),
-               State("table","page_current"),
-               State("condition","value"),
-               State("f_min","value"),
-               State("w","value"),
-               State("wh","value"),
-               State("we","value"),
-               State("wm","value"),
-               ])
-def update_table(n,progress,corpus,n_size,split,table_state,condition,f_min,w,wh,we,wm):
-    
-    if n is None:
-        return dash.no_update,dash.no_update,dash.no_update,dash.no_update
-
-    #add alert corpus if not selected
-    if corpus is None:
-        return dash.no_update,dbc.Alert("Please choose corpus",color="danger",duration=2000,dismissable=False),dash.no_update,dash.no_update
-
-    
-    ###  MAKE MARKOV CHAIN ####
-    global data,L,V,model,ngram,df
-    #if n>1:
-    #del model
-    #with open("corpus/"+corpus) as f:
-    #    file=f.read()
-    #if split =="letter":
-    #    data=remove_punctuation(file)
-    start=time()
-    #fmin=4
-    #order=1
-    #split="word"
-    #option="obc"
-    #print(L)
-    #print(data)
-    make_markov_chain(data,order=n_size,split=split)
-    #print(model.keys())
-    
-    df=make_dataframe(model,L,f_min)
-    #print(progress)
-    progress=50
-    for index,ngram in enumerate(df['ngram']):
-        print(str(index)+" of "+str(len(df['ngram'])),end="\r")
-        
-        model[ngram].dt=calculate_distance(np.array(model[ngram].pos,dtype=np.uint8),L,condition)
-
-    #print(model[ngram].dt)
-
-    #print(df)
-    windows=list(range(w,wm,we))
-    fa(np.zeros(5),(1,3,4))
-    
-    def func(wind):
-        model[ngram].counts[wind],model[ngram].fa[wind]=fa(model[ngram].bool,(wind,wh,L))
-    for index,ngram in enumerate(df['ngram']):
-        print(str(index)+" of "+str(len(df['ngram'])),end="\r")
-        with ThreadPoolExecutor() as e:
-            e.map(func,windows)
-    #calculate_fa(df,model,w,wh,we,wm,L,condition)
-    ###
-    temp_b=[]
-
-   # temp_fi=[]
-    temp_R=[]
-    temp_error=[]
-    temp_ngram=[]
-    temp_a=[]
-
-    for ngram in df['ngram']:
-        model[ngram].temp_fa=[]
-        c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],method='lm',maxfev=5000)
-        model[ngram].a=c[0]
-        model[ngram].b=c[1]
-        for w in model[ngram].fa.keys():
-            model[ngram].temp_fa.append(fit(w,model[ngram].a,model[ngram].b))
-        temp_error.append(round(r2_score([*model[ngram].fa.values()],model[ngram].temp_fa),5))
-        temp_b.append(round(c[1],7))
-        temp_a.append(round(c[0],7))
-
-        
-        if ngram.__class__ is tuple:
-            temp_ngram.append("  ".join(ngram))
-        #print(np.array(model[ngram].dt))
-        temp_R.append(round(R(np.array(model[ngram].dt)),7))
-
-    if n_size>1:
-        df["ngram"]=temp_ngram
-    df['R']=temp_R
-    
-    #df['f_i']=temp_fi
-    df['b']=temp_b 
-    df['a']=temp_a
-    df['goodness']=temp_error
-
-    df=df.sort_values(by="ƒ",ascending=False)
-    df['rank']=range(1,len(temp_R)+1)
-    df=df.set_index(pd.Index(np.arange(len(df))))
-    print(df)
-    #print("here",df.index)
-    #print(model)
-        #return [{"name":i,"id":i}for i in df.columns]
-    #print("chain time:",time()-start)
-    #print(df.to_dict("records"))
-   # print()
-    return [df.to_dict("records"),dash.no_update,["Vocabulary: ",V],["Time: ",round(time()-start,6)]]
-
 
 import webbrowser
 if __name__=="__main__":
@@ -697,6 +798,28 @@ if __name__=="__main__":
 
 
 
+"""
+                                        html.Div(children=[dbc.Spinner(dt.DataTable(id='table',
+                                                columns=[{"name":i,"id":i}for i in ['rank',"ngram","ƒ","R","a","b","goodness"]],
+                                                style_data={'whiteSpace': 'auto','height': 'auto'},
+                                                editable=False,
+                                                filter_action="native",
+                                                sort_action="native",
+                                                page_size=10,
+                                                fixed_rows={'headers': True},
+                                                style_cell={'whiteSpace': 'normal',
+                                                             'height': 'auto',
+                                                            'textAlign': 'right',
+                                                             "fontSize":15,
+                                                            "font-family":"sans-serif"},#'minWidth': 40, 'width': 95, 'maxWidth': 95},
+                                            style_table={'height': 450, 'overflowY': 'auto',"overflowX":"none"}
+                                                  ))],  style={"display","none"}),
+                                                html.Div(children=[
+                                                    dbc.Spinner(
+                                                    dcc.Graph(id='chain'))],
+                                                                      id="box_chain",
+                                                                      style={"display":'none'})
+"""
 
 
 
