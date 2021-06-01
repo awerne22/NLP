@@ -441,6 +441,7 @@ layout1=html.Div([
 from dash.dependencies import Input,Output,State
 app.layout=layout1
 df=None
+g=None
 import plotly.express as px
 from sklearn.metrics import r2_score
 import networkx as nx
@@ -509,7 +510,7 @@ def calc_window(corpus,split):
 def update_table(n,progress,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm):
     
     
-    global data,L,V,model,ngram,df
+    global data,L,V,model,ngram,df,g
     if dataframe=="markov_chain":
 
         if n is None:
@@ -591,9 +592,9 @@ def update_table(n,progress,dataframe,corpus,n_size,split,condition,f_min,w,wh,w
         for node, adjacencies in enumerate(g.adjacency()):
             node_adjacencies.append(len(adjacencies[1]))
             if n_size>1:
-                node_text.append(" ".join(adjacencies[0])+'<br>connections: '+str(len(adjacencies[1])))
+                node_text.append('<b>'+"".join(adjacencies[0])+"</b>"+'<br><br>connections='+str(len(adjacencies[1])))
                 continue
-            node_text.append("".join(adjacencies[0])+'<br>connections: '+str(len(adjacencies[1])))
+            node_text.append("<b>"+"".join(adjacencies[0])+"</b>"+'<br><br>connections: '+str(len(adjacencies[1])))
 
         node_trace.marker.color = node_adjacencies
         node_trace.text = node_text
@@ -664,9 +665,11 @@ def update_table(n,progress,dataframe,corpus,n_size,split,condition,f_min,w,wh,w
 
             
             if ngram.__class__ is tuple:
-                temp_ngram.append("  ".join(ngram))
+                temp_ngram.append(" ".join(ngram))
             #print(np.array(model[ngram].dt))
-            temp_R.append(round(R(np.array(model[ngram].dt)),7))
+            r=round(R(np.array(model[ngram].dt)),7)
+            temp_R.append(r)
+            model[ngram].R=r
 
         if n_size>1:
             df["ngram"]=temp_ngram
@@ -684,14 +687,16 @@ def update_table(n,progress,dataframe,corpus,n_size,split,condition,f_min,w,wh,w
         return [df.to_dict("record"),dash.no_update,{"display":"inline"},{"display":"none"},dash.no_update,["Vocabulary: ",V],["Time: ",round(time()-start,6)]]
 
 @app.callback(Output("graphs","figure"),
-              [Input("card-tabs","active_tab"),
+              [Input("dataframe","active_tab"),
+                  Input("card-tabs","active_tab"),
                 Input("table","active_cell"),
                Input("table","derived_virtual_selected_rows"),
                Input("table","derived_virtual_indices"),
-               Input("scale","value")
-               ],[State("n_size","value")])
-def tab_content(active_tab,active_cell,row_ids,ids,scale,n):
-    global model,df,L
+               Input("chain","clickData"),
+               Input("scale","value")],
+              [State("n_size","value")])
+def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,scale,n):
+    global model,df,L,g
     if df is None:
         return dash.no_update
     if ids is None:
@@ -702,71 +707,123 @@ def tab_content(active_tab,active_cell,row_ids,ids,scale,n):
     fig.update_layout(
         margin=dict(l=0,r=0,t=0,b=0)
     )
-    if active_tab=="tab1":
-        if active_cell:
-            ngram=''
-            if n>1:
-                print(df['ngram'][0])
-                ngram=tuple(df['ngram'][ids[active_cell['row']]].split())
+    print(active_tab2)
+    if active_tab2=="markov_chain":
+        if clicked_data:
+            nodes=np.array(g.nodes())
+            #print(nodes[clicked_data['points'][0]['pointNumber']])
+            ngram=nodes[clicked_data['points'][0]['pointNumber']]
+            if active_tab1=="tab1":
+                #ngram=nodes[clicked_data['posins'][0]['pointNumber']]
+                fig.add_trace(go.Scatter(x=np.array(range(L)),y=model[ngram].bool))
+                fig.update_xaxes(type=scale)
+                return fig
+            if active_tab1=="tab2":
+
+                fig.add_trace(
+                        go.Scatter(x=[*model[ngram].fa.keys()],
+                                         y=[*model[ngram].fa.values()],
+                                         mode='markers',
+                                        name="∆F"))
+                fig.add_trace(go.Scatter(
+                                    x=[*model[ngram].fa.keys()],
+                                    y=model[ngram].temp_fa,
+                                    name="fit"))
+                fig.update_xaxes(type=scale)
+                fig.update_yaxes(type=scale)
+                return fig
+            if active_tab1=="tab3":
+
+                hover_data=[]                
+                for data in df['ngram']:
+                    hover_data.append("".join(data))
+                fig.add_trace(go.Scatter(x=df["R"],y=df["b"],mode="markers",text=hover_data))
+                fig.add_trace(go.Scatter(x=[model[ngram].R],
+                                         y=[model[ngram].b],
+                                         mode="markers",
+                                         text=' '.join(ngram),
+                                         marker=dict(
+                                             size=20,
+                                             color="red"
+                                         ))) 
+                fig.update_layout(showlegend=False)
+                fig.update_yaxes(type=scale)
+                fig.update_xaxes(type=scale)
+                return fig
             else:
-                ngram=df['ngram'][ids[active_cell['row']]]
-            fig.add_trace(go.Scatter(x=np.array(range(L)),y=model[ngram].bool))
-            fig.update_xaxes(type=scale)
-            return fig
-        else:
-            return fig
-        return fig
-    if active_tab=="tab2":
-        if active_cell:
-            if n>1:
-                ngram=tuple(df['ngram'][ids[active_cell['row']]].split())
-            else:
-                ngram=df['ngram'][ids[active_cell['row']]]
-            fig.add_trace(
-                    go.Scatter(x=[*model[ngram].fa.keys()],
-                                     y=[*model[ngram].fa.values()],
-                                     mode='markers',
-                                    name="∆F"))
-            fig.add_trace(go.Scatter(
-                                x=[*model[ngram].fa.keys()],
-                                y=model[ngram].temp_fa,
-                                name="fit"))
-            fig.update_xaxes(type=scale)
-            fig.update_yaxes(type=scale)
-            return fig
-        else:
-            return fig
+                return fig
+
+
+
+
+
+        return dash.no_update
     else:
-        hover_data=[]
-        if active_cell:
-            if n>1:
-                ngram=tuple(df['ngram'][ids[active_cell['row']]].split())
+        if active_tab1=="tab1":
+            if active_cell:
+                ngram=''
+                if n>1:
+                    print(df['ngram'][0])
+                    ngram=tuple(df['ngram'][ids[active_cell['row']]].split())
+                else:
+                    ngram=df['ngram'][ids[active_cell['row']]]
+                fig.add_trace(go.Scatter(x=np.array(range(L)),y=model[ngram].bool))
+                fig.update_xaxes(type=scale)
+                return fig
             else:
-                ngram=df['ngram'][ids[active_cell['row']]]
-            
-            for data in df['ngram']:
-                hover_data.append("".join(data))
-            fig.add_trace(go.Scatter(x=df["R"],y=df["b"],mode="markers",text=hover_data))
-            fig.add_trace(go.Scatter(x=[df['R'][active_cell['row']]],
-                                     y=[df["b"][active_cell['row']]],
-                                     mode="markers",
-                                     text=' '.join(ngram),
-                                     marker=dict(
-                                         size=20,
-                                         color="red"
-                                     ))) 
-            fig.update_layout(showlegend=False)
-            fig.update_yaxes(type=scale)
-            fig.update_xaxes(type=scale)
+                return fig
             return fig
+        if active_tab1=="tab2":
+            if active_cell:
+                if n>1:
+                    ngram=tuple(df['ngram'][ids[active_cell['row']]].split())
+                else:
+                    ngram=df['ngram'][ids[active_cell['row']]]
+                fig.add_trace(
+                        go.Scatter(x=[*model[ngram].fa.keys()],
+                                         y=[*model[ngram].fa.values()],
+                                         mode='markers',
+                                        name="∆F"))
+                fig.add_trace(go.Scatter(
+                                    x=[*model[ngram].fa.keys()],
+                                    y=model[ngram].temp_fa,
+                                    name="fit"))
+                fig.update_xaxes(type=scale)
+                fig.update_yaxes(type=scale)
+                return fig
+            else:
+                return fig
         else:
-            
-            for data in df["ngram"]:
-                hover_data.append("".join(data))
-            fig.add_trace(go.Scatter(x=df["R"],y=df["b"],mode="markers",text=hover_data))
-            fig.update_yaxes(type=scale)
-            fig.update_xaxes(type=scale)
-        return fig        
+            hover_data=[]
+            if active_cell:
+                if n>1:
+                    ngram=tuple(df['ngram'][ids[active_cell['row']]].split())
+                else:
+                    ngram=df['ngram'][ids[active_cell['row']]]
+                
+                for data in df['ngram']:
+                    hover_data.append("".join(data))
+                fig.add_trace(go.Scatter(x=df["R"],y=df["b"],mode="markers",text=hover_data))
+                fig.add_trace(go.Scatter(x=[df['R'][active_cell['row']]],
+                                         y=[df["b"][active_cell['row']]],
+                                         mode="markers",
+                                         text=' '.join(ngram),
+                                         marker=dict(
+                                             size=20,
+                                             color="red"
+                                         ))) 
+                fig.update_layout(showlegend=False)
+                fig.update_yaxes(type=scale)
+                fig.update_xaxes(type=scale)
+                return fig
+            else:
+                
+                for data in df["ngram"]:
+                    hover_data.append("".join(data))
+                fig.add_trace(go.Scatter(x=df["R"],y=df["b"],mode="markers",text=hover_data))
+                fig.update_yaxes(type=scale)
+                fig.update_xaxes(type=scale)
+            return fig        
 
         return dash.no_update
 @app.callback([Output("temp_seve","children")],
