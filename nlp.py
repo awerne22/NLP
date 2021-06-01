@@ -592,7 +592,7 @@ def update_table(n,progress,dataframe,corpus,n_size,split,condition,f_min,w,wh,w
         for node, adjacencies in enumerate(g.adjacency()):
             node_adjacencies.append(len(adjacencies[1]))
             if n_size>1:
-                node_text.append('<b>'+"".join(adjacencies[0])+"</b>"+'<br><br>connections='+str(len(adjacencies[1])))
+                node_text.append('<b>'+" ".join(adjacencies[0])+"</b>"+'<br><br>connections='+str(len(adjacencies[1])))
                 continue
             node_text.append("<b>"+"".join(adjacencies[0])+"</b>"+'<br><br>connections: '+str(len(adjacencies[1])))
 
@@ -712,10 +712,13 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
         if clicked_data:
             nodes=np.array(g.nodes())
             #print(nodes[clicked_data['points'][0]['pointNumber']])
-            ngram=nodes[clicked_data['points'][0]['pointNumber']]
+            ngram=tuple(nodes[clicked_data['points'][0]['pointNumber']])
             if active_tab1=="tab1":
+
                 #ngram=nodes[clicked_data['posins'][0]['pointNumber']]
-                fig.add_trace(go.Scatter(x=np.array(range(L)),y=model[ngram].bool))
+
+
+                fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool))
                 fig.update_xaxes(type=scale)
                 return fig
             if active_tab1=="tab2":
@@ -767,7 +770,7 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
                     ngram=tuple(df['ngram'][ids[active_cell['row']]].split())
                 else:
                     ngram=df['ngram'][ids[active_cell['row']]]
-                fig.add_trace(go.Scatter(x=np.array(range(L)),y=model[ngram].bool))
+                fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool))
                 fig.update_xaxes(type=scale)
                 return fig
             else:
@@ -787,7 +790,7 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
                 fig.add_trace(go.Scatter(
                                     x=[*model[ngram].fa.keys()],
                                     y=model[ngram].temp_fa,
-                                    name="fit"))
+                                    name="fit=aw^b"))
                 fig.update_xaxes(type=scale)
                 fig.update_yaxes(type=scale)
                 return fig
