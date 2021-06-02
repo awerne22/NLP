@@ -86,6 +86,8 @@ class Ngram (dict):
 def make_dataframe(model,L,fmin=0):
 
     filtred_data=list(filter(lambda x:model[x].F_i >=fmin,model))
+    if 'new_word' not in filtred_data:
+        filtred_data.append("new_word")
     data={"rank":np.empty(len(filtred_data)),
           "ngram":[],
           "ƒ":np.empty(len(filtred_data),dtype=np.dtype(int))}
@@ -96,6 +98,10 @@ def make_dataframe(model,L,fmin=0):
         #    data["ngram"].append("  ".join(ngram))
         #else:
         data["ngram"].append(ngram)
+
+        if ngram=="new_word":
+            data['ƒ'][i]=sum(model[ngram].bool)
+            continue
         data["ƒ"][i]=len(model[ngram].pos)
         
         #data["f_i"][i]=round(model[ngram].F_i/L,7)
@@ -108,6 +114,8 @@ def make_markov_chain(data,order=1,split='word'):
     model=dict()
 
     L=len(data)-order
+    model['new_word']=Ngram()
+    model['new_word'].bool=np.zeros(L)
     if order>1:
         for i in range(L):
             window = tuple (data[i: i+order])  # Додаємо в словник
@@ -123,6 +131,8 @@ def make_markov_chain(data,order=1,split='word'):
 
                  model[window].bool=np.zeros(L)
                  model[window].bool[i]=1
+                 model['new_word'].bool[i]=1
+
     else:
         for i in range(L):
             if data[i] in model: # Приєднуємо до вже існуючого розподілу
@@ -135,6 +145,7 @@ def make_markov_chain(data,order=1,split='word'):
                  model[data[i]].pos.append(i)
                  model[data[i]].bool=np.zeros(L)
                  model[data[i]].bool[i]=1
+                 model['new_word'].bool[i]=1
     V=len(model)
 
 
@@ -534,6 +545,8 @@ def update_table(n,progress,dataframe,corpus,n_size,split,condition,f_min,w,wh,w
             temp[ngram[0]]=ngram
   
         for node in g.nodes():
+            if node[0]=="new_word":
+                node='new_word'
             for i in model[node]:
                 if i in temp:
                     g.add_edge(node,temp[i],weight=model[node][i])
@@ -634,6 +647,9 @@ def update_table(n,progress,dataframe,corpus,n_size,split,condition,f_min,w,wh,w
         df=make_dataframe(model,L,f_min)
         for index,ngram in enumerate(df['ngram']):
             print(str(index)+" of "+str(len(df['ngram'])),end="\r")
+            if ngram=="new_word":
+                model[ngram].dt=calculate_distance(np.array(model[ngram].bool,dtype=np.uint8),L,condition)
+                continue
             model[ngram].dt=calculate_distance(np.array(model[ngram].pos,dtype=np.uint8),L,condition)
         windows=list(range(w,wm,we))
         fa(np.zeros(5),(1,3,4))
@@ -650,8 +666,10 @@ def update_table(n,progress,dataframe,corpus,n_size,split,condition,f_min,w,wh,w
         temp_R=[]
         temp_error=[]
         temp_ngram=[]
+        
+            
         temp_a=[]
-
+        
         for ngram in df['ngram']:
             model[ngram].temp_fa=[]
             c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],method='lm',maxfev=5000)
@@ -665,6 +683,7 @@ def update_table(n,progress,dataframe,corpus,n_size,split,condition,f_min,w,wh,w
 
             
             if ngram.__class__ is tuple:
+
                 temp_ngram.append(" ".join(ngram))
             #print(np.array(model[ngram].dt))
             r=round(R(np.array(model[ngram].dt)),7)
@@ -672,6 +691,7 @@ def update_table(n,progress,dataframe,corpus,n_size,split,condition,f_min,w,wh,w
             model[ngram].R=r
 
         if n_size>1:
+            temp_ngram.append("new_word")
             df["ngram"]=temp_ngram
         df['R']=temp_R
         df['b']=temp_b 
@@ -707,12 +727,21 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
     fig.update_layout(
         margin=dict(l=0,r=0,t=0,b=0)
     )
-    print(active_tab2)
+    #print(active_tab2)
     if active_tab2=="markov_chain":
         if clicked_data:
             nodes=np.array(g.nodes())
             #print(nodes[clicked_data['points'][0]['pointNumber']])
-            ngram=tuple(nodes[clicked_data['points'][0]['pointNumber']])
+            ngram=nodes[clicked_data['points'][0]['pointNumber']]
+            if n>1:
+                
+
+                ngram=tuple(nodes[clicked_data['points'][0]['pointNumber']])
+
+                if ngram[0]=='new_word':
+                    ngram='new_word'
+
+            
             if active_tab1=="tab1":
 
                 #ngram=nodes[clicked_data['posins'][0]['pointNumber']]
@@ -766,8 +795,11 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
             if active_cell:
                 ngram=''
                 if n>1:
-                    print(df['ngram'][0])
+                    
+                    #print(df['ngram'][0])
                     ngram=tuple(df['ngram'][ids[active_cell['row']]].split())
+                    if ngram[0]=='new_word':
+                        ngram='new_word'
                 else:
                     ngram=df['ngram'][ids[active_cell['row']]]
                 fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool))
@@ -780,6 +812,8 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
             if active_cell:
                 if n>1:
                     ngram=tuple(df['ngram'][ids[active_cell['row']]].split())
+                    if ngram[0]=='new_word':
+                        ngram='new_word'
                 else:
                     ngram=df['ngram'][ids[active_cell['row']]]
                 fig.add_trace(
@@ -801,6 +835,8 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
             if active_cell:
                 if n>1:
                     ngram=tuple(df['ngram'][ids[active_cell['row']]].split())
+                    if ngram[0]=='new_word':
+                        ngram='new_word'
                 else:
                     ngram=df['ngram'][ids[active_cell['row']]]
                 
@@ -835,13 +871,13 @@ def save(n):
     if n is None :
         return dash.no_update
     else:
-        print("here")
+        #print("here")
         global df
-        print(df)
+        #print(df)
         writer=pd.ExcelWriter("output.xlsx")
         df.to_excel(writer)
         writer.save()
-        print("done")
+        #print("done")
     return dash.no_update
 
 
