@@ -116,6 +116,7 @@ def make_markov_chain(data,order=1,split='word'):
     L=len(data)-order
     model['new_word']=Ngram()
     model['new_word'].bool=np.zeros(L)
+    model['new_word'].pos=[]
     if order>1:
         for i in range(L):
             window = tuple (data[i: i+order])  # Додаємо в словник
@@ -132,6 +133,7 @@ def make_markov_chain(data,order=1,split='word'):
                  model[window].bool=np.zeros(L)
                  model[window].bool[i]=1
                  model['new_word'].bool[i]=1
+                 model['new_word'].pos.append(i)
 
     else:
         for i in range(L):
@@ -146,6 +148,7 @@ def make_markov_chain(data,order=1,split='word'):
                  model[data[i]].bool=np.zeros(L)
                  model[data[i]].bool[i]=1
                  model['new_word'].bool[i]=1
+                 model['new_word'].pos.append(i)
     V=len(model)
 
 
@@ -221,7 +224,94 @@ def fit(x,a,b):
     return a*x**b
 
 
+def prepere_data(data,n,split):
+    global L
+    temp_data=[]
+    if n==1:
+        if split=="word":
+        #data.replace(" ","space")
+            data=data.split()
+            L=len(data)-n
+            return data
+        if split=='letter':
+            data=remove_punctuation(data)
+            for i in data:
+                for j in i:
+                    if j ==" ":
+                        continue
+                    temp_data.append(j)
+            L=len(temp_data)-n
+            return temp_data
+        if split=='symbol':
+            for i in data:
+                for j in i:
+                    if j ==" ":
+                        temp_data.append("space")
+                        continue
+                    temp_data.append(j)
+            L=len(temp_data)-n
+            return temp_data
+    if n>1:
+        
+        if split=="word":
+            data=data.split()
+            L=len(data)-n
+            for i in range(L):
+                window = tuple(data[i: i+n])
+                temp_data.append(window)
+            return temp_data
+        if split=="letter":
+            data=remove_punctuation(data.split())
+            for i in data:
+                for j in i:
+                    temp_data.append(j)
+            L=len(temp_data)-n
+            data=temp_data
+            temp_data=[]
+            for i in range(L):
+                window = tuple (data[i: i+n])
+                temp_data.append(window)
+            return temp_data
+        if split=='symbol':
+            temp_data=[]
+            for i in data:
+                for j in i:
+                    if j==" ":
+                        temp_data.append("space")
+                        continue
+                    temp_data.append(j)
+            data=temp_data
+            temp_data=[]
+            L=len(data)-n
+            for i in range(L):
+                window=tuple(data[i:i+n])
+                temp_data.append(window)
+            return temp_data
 
+#@jit(nopython=True)
+def dfa(data,args):
+    wi,wh,l=args
+    count=np.empty(len(range(wi,l,wh)),dtype=np.uint8)
+    for index,i in enumerate(range(0,l-wi,wh)):
+        temp_v=[]
+        x=[]
+        for ngram in data[i:i+wi]:
+            if ngram in temp_v:
+                x.append(0)
+            else:
+                temp_v.append(ngram)
+                x.append(1)
+        count[index]=s(np.array(x,dtype=np.uint8))
+        return count,mse(count)
+class newNgram():
+    def __init__(self,data,wh,l):
+        self.data=data
+        self.count={}
+        self.dfa={}
+        self.wh,self.l=wh,l
+    def func(self,w):
+        self.count[w],self.dfa[w]=dfa(self.data,(w,self.wh,self.l))
+    
 
 
 import dash
@@ -332,6 +422,21 @@ layout1=html.Div([
                                         ],size="md",className="window"
                                     ),
 
+                                    dbc.InputGroup(
+                                        [
+                                            dbc.Select(
+                                                id="def",
+                                                options=[
+                                                    {"label":"static","value":"static"},
+                                                    {"label":"dynamic","value":"dynamic"}                                                     
+                                                ],
+                                                value="static"
+                                            ),
+                                            dbc.InputGroupAddon("Defenition", addon_type="append")
+                                        ],size="md",className="window"
+                                    ),
+
+                                    
 
                                     #dbc.Input(placeholder="size of ngram",type="number"),
                                     #html.H6("Size of ngram:"),
@@ -342,7 +447,11 @@ layout1=html.Div([
                                     #dcc.RadioItems(id='condition',options=[{"label":"no","value":"no"},{"label":"periodic","value":"periodic"},{"label":"ordinary","value":"ordinary"}],value="words"),
                                     html.Br(),
                                             dbc.Button("Analyze", id="chain_button",color="primary",block=True),
-                                            dbc.Progress(id="progress",value=0)
+                                            
+                                            dbc.Button("Save data",id="save",color="danger",block=True),
+                                            html.Div(id="temp_seve",
+                                             children=[]
+                                            )
                                         ]),
                                     html.Div(id="alert",children=[])
                                                                         #html.H6("Boundary Condition:"),
@@ -357,10 +466,6 @@ layout1=html.Div([
                                         html.Div(id="lenght",children=["Lenght: ",]),
                                         html.Div(id="vocabulary",children=["Vocabulary: ",]),
                                         html.Div(id="chain_time",children=["Time: ",]),
-                                        dbc.Spinner(dbc.Button("Save data",id="save",color="success",size="md")),
-                                        html.Div(id="temp_seve",
-                                             children=[]
-                                            )
 
 
                                     ]
@@ -461,9 +566,10 @@ import networkx as nx
                Output("wh","value"),
               # Output("we","value"),
                Output("wm","value"),
-               Output("lenght","children"),],
-               [Input("corpus","value")],Input("split","value"))
-def calc_window(corpus,split):
+               Output("lenght","children")],
+               [Input("corpus","value"),Input("split","value"),
+              Input("def","value"),Input("n_size","value")])
+def calc_window(corpus,split,defenition,n):
     if corpus is None:
         return dash.no_update,dash.no_update,dash.no_update,dash.no_update
     global L,data
@@ -471,42 +577,48 @@ def calc_window(corpus,split):
     with open("corpus/"+corpus) as f:
         file=f.read()
         file=unicodedata.normalize("NFKD",file)
-    temp=[]
-    if split =="letter":
-        data=remove_punctuation(file)
-        for word in data:
-            for i in word:
-                if i == ' ':
-                    #temp.append("space")
-                    continue
-                temp.append(i)
-        #temp.replace(" ","space")
-        data=temp
-    if split =="symbol":
-        data=file
-        for i in data:
-            if i ==" ":
-                temp.append("space")
-            else:
-                temp.append(i)
-        #temp.replace(" ","space")
-        data=temp
-        
-    if split =="word":
-        data=remove_punctuation(file)
-        data.replace(" ","space")
-        data=data.split()
-        
+    if defenition=="dynamic":
+        data=prepere_data(file,n,split)
+        wm=int(L/10)
+        w=int(wm/10)
+    else:
 
 
-    
-    L=len(data)
-    wm=int(L/10)
-    w=int(wm/10)
+        temp=[]
+        if split =="letter":
+            data=remove_punctuation(file)
+            for word in data:
+                for i in word:
+                    #if i == ' ':
+                        #temp.append("space")
+                     #   continue
+                    temp.append(i)
+            #temp.replace(" ","space")
+            data=temp
+        if split =="symbol":
+            data=file
+            for i in data:
+                if i ==" ":
+                    temp.append("space")
+                else:
+                    temp.append(i)
+            #temp.replace(" ","space")
+            data=temp
+            
+        if split =="word":
+            data=remove_punctuation(file)
+            #data.replace(" ","space")
+            data=data.split()
+            
+
+
+        
+        L=len(data)-n
+        wm=int(L/10)
+        w=int(wm/10)
     return [w,w,wm,["Lenght: ",L]]
 @app.callback([Output("table","data"),Output("chain","figure"),Output("box_tab","style"),Output("box_chain","style"),Output("alert","children"),Output("vocabulary","children"),Output("chain_time","children")],
               [Input("chain_button","n_clicks"),
-               Input("progress","value"),
                Input("dataframe","active_tab")],
               [State("corpus","value"),
                State("n_size","value"),
@@ -517,8 +629,9 @@ def calc_window(corpus,split):
                State("wh","value"),
                State("we","value"),
                State("wm","value"),
+               State("def","value")
                ])
-def update_table(n,progress,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm):
+def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defenition):
     
     
     global data,L,V,model,ngram,df,g
@@ -640,69 +753,121 @@ def update_table(n,progress,dataframe,corpus,n_size,split,condition,f_min,w,wh,w
         if corpus is None:
             return dash.no_updata,dash.no_update,{"display":"inline"},{"display":"none"},dbc.Alert("Please choose corpus",color="danger",duration=2000,dismissable=False),dash.no_update,dash.no_update
 
+        if defenition=="dynamic":
 
-        ###  MAKE MARKOV CHAIN ####
-        start=time()
-        make_markov_chain(data,order=n_size,split=split)
-        df=make_dataframe(model,L,f_min)
-        for index,ngram in enumerate(df['ngram']):
-            print(str(index)+" of "+str(len(df['ngram'])),end="\r")
-            if ngram=="new_word":
-                model[ngram].dt=calculate_distance(np.array(model[ngram].bool,dtype=np.uint8),L,condition)
-                continue
-            model[ngram].dt=calculate_distance(np.array(model[ngram].pos,dtype=np.uint8),L,condition)
-        windows=list(range(w,wm,we))
-        fa(np.zeros(5),(1,3,4))
-        def func(wind):
-            model[ngram].counts[wind],model[ngram].fa[wind]=fa(model[ngram].bool,(wind,wh,L))
-        for index,ngram in enumerate(df['ngram']):
-            print(str(index)+" of "+str(len(df['ngram'])),end="\r")
-            with ThreadPoolExecutor() as e:
-                e.map(func,windows)
-        #calculate_fa(df,model,w,wh,we,wm,L,condition)
-        ###
-        temp_b=[]
+            start=time()
+            windows=list(range(w,wm,we))
+            #2. create newNgram
 
-        temp_R=[]
-        temp_error=[]
-        temp_ngram=[]
-        
+            new_ngram=newNgram(data,wh,L)
+            print(data[0:10])
+            print(windows)
+            #with ThreadPoolExecutor() as e:
+            #    e.map(new_ngram.func,windows)
+            for w in windows:
+                new_ngram.func(w)
+            #calculate coefs
+            temp_v=[]
+            temp_pos=[]
+            for i,ngram in enumerate(data):
+                if ngram not in temp_v:
+                    temp_v.append(ngram)
+                    temp_pos.append(i)
+            new_ngram.dt=calculate_distance(np.array(temp_pos,dtype=np.uint8),L,condition)
+            new_ngram.R=round(R(new_ngram.dt),7)
+            c,cov=curve_fit(fit,[*new_ngram.dfa.keys()],[*new_ngram.dfa.values()],method='lm',maxfev=5000)
+            new_ngram.a=round(c[0],7)
+            new_ngram.b=round(c[1],7)
+            new_ngram.temp_dfa=[]
+            for w in new_ngram.dfa.keys():
+                    new_ngram.temp_dfa.append(fit(w,new_ngram.a,new_ngram.b))
+            new_ngram.goodness=round(r2_score([*new_ngram.dfa.values()],new_ngram.temp_dfa),7)
+            df=pd.DataFrame()
+            df['rank']=[1]
+            df['ngram']=['new_ngram']
+            df["ƒ"]=[len(temp_pos)]
+            df['R']=[new_ngram.R]
+            df["a"]=[new_ngram.a]
+            df["b"]=[new_ngram.b]
+            df['goodness']=[new_ngram.goodness]
+            V=len(temp_v)
+
+
+
+
+
+
+
+
+            #add df 
+
+
+
             
-        temp_a=[]
         
-        for ngram in df['ngram']:
-            model[ngram].temp_fa=[]
-            c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],method='lm',maxfev=5000)
-            model[ngram].a=c[0]
-            model[ngram].b=c[1]
-            for w in model[ngram].fa.keys():
-                model[ngram].temp_fa.append(fit(w,model[ngram].a,model[ngram].b))
-            temp_error.append(round(r2_score([*model[ngram].fa.values()],model[ngram].temp_fa),5))
-            temp_b.append(round(c[1],7))
-            temp_a.append(round(c[0],7))
+        else:
+            ###  MAKE MARKOV CHAIN ####
+            start=time()
+            make_markov_chain(data,order=n_size,split=split)
+            df=make_dataframe(model,L,f_min)
+            for index,ngram in enumerate(df['ngram']):
+                print(str(index)+" of "+str(len(df['ngram'])),end="\r")
+                if ngram=="new_word":
+                    model[ngram].dt=calculate_distance(np.array(model[ngram].pos,dtype=np.uint8),L,condition)
+                    continue
+                model[ngram].dt=calculate_distance(np.array(model[ngram].pos,dtype=np.uint8),L,condition)
+            windows=list(range(w,wm,we))
+            fa(np.zeros(5),(1,3,4))
+            def func(wind):
+                model[ngram].counts[wind],model[ngram].fa[wind]=fa(model[ngram].bool,(wind,wh,L))
+            for index,ngram in enumerate(df['ngram']):
+                print(str(index)+" of "+str(len(df['ngram'])),end="\r")
+                with ThreadPoolExecutor() as e:
+                    e.map(func,windows)
+            #calculate_fa(df,model,w,wh,we,wm,L,condition)
+            ###
+            temp_b=[]
 
+            temp_R=[]
+            temp_error=[]
+            temp_ngram=[]
             
-            if ngram.__class__ is tuple:
+                
+            temp_a=[]
+            
+            for ngram in df['ngram']:
+                model[ngram].temp_fa=[]
+                c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],method='lm',maxfev=5000)
+                model[ngram].a=c[0]
+                model[ngram].b=c[1]
+                for w in model[ngram].fa.keys():
+                    model[ngram].temp_fa.append(fit(w,model[ngram].a,model[ngram].b))
+                temp_error.append(round(r2_score([*model[ngram].fa.values()],model[ngram].temp_fa),5))
+                temp_b.append(round(c[1],7))
+                temp_a.append(round(c[0],7))
 
-                temp_ngram.append(" ".join(ngram))
-            #print(np.array(model[ngram].dt))
-            r=round(R(np.array(model[ngram].dt)),7)
-            temp_R.append(r)
-            model[ngram].R=r
+                
+                if ngram.__class__ is tuple:
 
-        if n_size>1:
-            temp_ngram.append("new_word")
-            df["ngram"]=temp_ngram
-        df['R']=temp_R
-        df['b']=temp_b 
-        df['a']=temp_a
-        df['goodness']=temp_error
+                    temp_ngram.append(" ".join(ngram))
+                #print(np.array(model[ngram].dt))
+                r=round(R(np.array(model[ngram].dt)),7)
+                temp_R.append(r)
+                model[ngram].R=r
 
-        df=df.sort_values(by="ƒ",ascending=False)
-        df['rank']=range(1,len(temp_R)+1)
-        df=df.set_index(pd.Index(np.arange(len(df))))
-        print(df)
-        
+            if n_size>1:
+                temp_ngram.append("new_word")
+                df["ngram"]=temp_ngram
+            df['R']=temp_R
+            df['b']=temp_b 
+            df['a']=temp_a
+            df['goodness']=temp_error
+
+            df=df.sort_values(by="ƒ",ascending=False)
+            df['rank']=range(1,len(temp_R)+1)
+            df=df.set_index(pd.Index(np.arange(len(df))))
+            print(df)
+            
         #table.data=df.to_dict("records")
         return [df.to_dict("record"),dash.no_update,{"display":"inline"},{"display":"none"},dash.no_update,["Vocabulary: ",V],["Time: ",round(time()-start,6)]]
 
