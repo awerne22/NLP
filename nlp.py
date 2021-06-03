@@ -617,6 +617,7 @@ def calc_window(corpus,split,defenition,n):
         wm=int(L/10)
         w=int(wm/10)
     return [w,w,wm,["Lenght: ",L]]
+new_ngram=None
 @app.callback([Output("table","data"),Output("chain","figure"),Output("box_tab","style"),Output("box_chain","style"),Output("alert","children"),Output("vocabulary","children"),Output("chain_time","children")],
               [Input("chain_button","n_clicks"),
                Input("dataframe","active_tab")],
@@ -634,7 +635,7 @@ def calc_window(corpus,split,defenition,n):
 def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defenition):
     
     
-    global data,L,V,model,ngram,df,g
+    global data,L,V,model,ngram,df,g,new_ngram
     if dataframe=="markov_chain":
 
         if n is None:
@@ -879,9 +880,9 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
                Input("table","derived_virtual_indices"),
                Input("chain","clickData"),
                Input("scale","value")],
-              [State("n_size","value")])
-def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,scale,n):
-    global model,df,L,g
+              [State("n_size","value"),State("def","value")])
+def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,scale,n,defenition):
+    global model,df,L,g,new_ngram
     if df is None:
         return dash.no_update
     if ids is None:
@@ -894,6 +895,8 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
     )
     #print(active_tab2)
     if active_tab2=="markov_chain":
+        if defenition =="dynamic":
+            return dash.no_update
         if clicked_data:
             nodes=np.array(g.nodes())
             #print(nodes[clicked_data['points'][0]['pointNumber']])
@@ -958,6 +961,12 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
     else:
         if active_tab1=="tab1":
             if active_cell:
+                if defenition=="dynamic":
+                   # fig.add_trace(go.Scatter(x=np.arange(L),y=new_ngram.bool))
+                   # fig.update_xexec(type=scale)
+                    return dash.no_update
+
+
                 ngram=''
                 if n>1:
                     
@@ -975,6 +984,14 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
             return fig
         if active_tab1=="tab2":
             if active_cell:
+                
+                if defenition =="dynamic":
+                    fig.add_trace(go.Scatter(x=[*new_ngram.dfa.keys()],y=[*new_ngram.dfa.values()],mode='markers',name="∆F"))
+                    fig.add_trace(go.Scatter(x=[*new_ngram.dfa.keys()],y=[*new_ngram.temp_dfa],name="fit=aw^b"))
+                    fig.update_xaxes(type=scale)
+                    fig.update_yaxes(type=scale)
+                    return fig
+
                 if n>1:
                     ngram=tuple(df['ngram'][ids[active_cell['row']]].split())
                     if ngram[0]=='new_word':
@@ -998,6 +1015,13 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
         else:
             hover_data=[]
             if active_cell:
+                
+                if defenition =="dynamic":
+                    fig.add_trace(go.Scatter(x=new_ngram.R,y=new_ngram.b,mode='marekers',hover_data=["new_ngram"]))
+                    fig.update_xaxes(type=scale)
+                    fig.update_yaxes(type=scale)
+                    return fig
+
                 if n>1:
                     ngram=tuple(df['ngram'][ids[active_cell['row']]].split())
                     if ngram[0]=='new_word':
