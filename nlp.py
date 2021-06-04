@@ -39,6 +39,7 @@ import unicodedata
 from time import asctime
 
 from dash_core_components.Graph import Graph
+from dash_html_components.Legend import Legend
 from libs import *
 #print(file)
 def remove_punctuation(data):
@@ -86,8 +87,8 @@ class Ngram (dict):
 def make_dataframe(model,L,fmin=0):
 
     filtred_data=list(filter(lambda x:model[x].F_i >=fmin,model))
-    if 'new_word' not in filtred_data:
-        filtred_data.append("new_word")
+    if 'new_ngram' not in filtred_data:
+        filtred_data.append("new_ngram")
     data={"rank":np.empty(len(filtred_data)),
           "ngram":[],
           "ƒ":np.empty(len(filtred_data),dtype=np.dtype(int))}
@@ -99,7 +100,7 @@ def make_dataframe(model,L,fmin=0):
         #else:
         data["ngram"].append(ngram)
 
-        if ngram=="new_word":
+        if ngram=="new_ngram":
             data['ƒ'][i]=sum(model[ngram].bool)
             continue
         data["ƒ"][i]=len(model[ngram].pos)
@@ -114,9 +115,9 @@ def make_markov_chain(data,order=1,split='word'):
     model=dict()
 
     L=len(data)-order
-    model['new_word']=Ngram()
-    model['new_word'].bool=np.zeros(L)
-    model['new_word'].pos=[]
+    model['new_ngram']=Ngram()
+    model['new_ngram'].bool=np.zeros(L)
+    model['new_ngram'].pos=[]
     if order>1:
         for i in range(L):
             window = tuple (data[i: i+order])  # Додаємо в словник
@@ -132,8 +133,8 @@ def make_markov_chain(data,order=1,split='word'):
 
                  model[window].bool=np.zeros(L)
                  model[window].bool[i]=1
-                 model['new_word'].bool[i]=1
-                 model['new_word'].pos.append(i)
+                 model['new_ngram'].bool[i]=1
+                 model['new_ngram'].pos.append(i)
 
     else:
         for i in range(L):
@@ -147,8 +148,8 @@ def make_markov_chain(data,order=1,split='word'):
                  model[data[i]].pos.append(i)
                  model[data[i]].bool=np.zeros(L)
                  model[data[i]].bool[i]=1
-                 model['new_word'].bool[i]=1
-                 model['new_word'].pos.append(i)
+                 model['new_ngram'].bool[i]=1
+                 model['new_ngram'].pos.append(i)
     V=len(model)
 
 
@@ -226,6 +227,8 @@ def fit(x,a,b):
 
 def prepere_data(data,n,split):
     global L
+    if n is None:
+        return dash.no_update
     temp_data=[]
     if n==1:
         if split=="word":
@@ -251,6 +254,7 @@ def prepere_data(data,n,split):
                     temp_data.append(j)
             L=len(temp_data)-n
             return temp_data
+
     if n>1:
         
         if split=="word":
@@ -460,18 +464,8 @@ layout1=html.Div([
 
 
                                             ),
-                                dbc.CardHeader("Characteristics"),
-                                dbc.CardBody(
-                                    [
-                                        html.Div(id="lenght",children=["Lenght: ",]),
-                                        html.Div(id="vocabulary",children=["Vocabulary: ",]),
-                                        html.Div(id="chain_time",children=["Time: ",]),
-
-
-                                    ]
-                                            )
-
-                            ],color="light",style={"margin-left":"10px","margin-top":"10px",}
+                                
+                            ],color="light",style={"margin-left":"0px","margin-top":"10px",}
                                 ),
                         width={"size":3,"offset":0}
                         ),
@@ -494,7 +488,7 @@ layout1=html.Div([
                                 dbc.CardBody(
                                     [
                                         html.Div(id="box_tab",
-                                                 style={"display":"none"},
+                                                 style={"display":"none","height":"400px"},
                                                  children=[dbc.Spinner(dt.DataTable(
                                                     id="table",
                                                 columns=[{"name":i,"id":i}for i in ['rank',"ngram","ƒ","R","a","b","goodness"]],
@@ -502,35 +496,78 @@ layout1=html.Div([
                                                 editable=False,
                                                 filter_action="native",
                                                 sort_action="native",
-                                                page_size=30,
+                                                page_size=50,
                                                 fixed_rows={'headers': True},
+                                                fixed_columns={'headers': True},
                                                 style_cell={'whiteSpace': 'normal',
                                                              'height': 'auto',
+                                                            "widht":"auto",
                                                             'textAlign': 'right',
                                                              "fontSize":15,
                                                             "font-family":"sans-serif"},#'minWidth': 40, 'width': 95, 'maxWidth': 95},
-                                            style_table={'height': 420, 'overflowY': 'auto',"overflowX":"none"}
-                                                                                    ))]),
+                                                     style_table={"height":"400px","minWidth":"500px", 'overflowY': 'auto',"overflowX":"none"}
+                                                 ))]),
                                         html.Div(id="box_chain",
                                                  style={"display":"none"},
-                                                 children=[dbc.Spinner(dcc.Graph(id="chain"))])
+                                                 children=[dbc.Spinner(dcc.Graph(id="chain",style={"height":"400px"}))]),
+
+                                dbc.CardHeader("Characteristics"),
+                                dbc.CardBody(
+                                    [
+                                        html.Div(["Length: "],id="l"),
+                                        html.Div(["Vocabulary"],id="v"),
+                                        html.Div(["TIme: "],id="t")
+                                    ]
+                                            )
 
 
                                      ]
                                              )
-                                ],style={"margin-right":"10px","margin-top":"10px"}),
-                                dbc.Card(
+                                ],style={"padding":"0","margin-right":"0px","margin-top":"10px","height":"650px"}),
+                            ],
+                    width={"size":9,"padding":0}
+                            ),
+                                        ]
+                        ),
+                        dbc.Row([
+                            dbc.Col(
+                                width={"size":6,"offset":0},
+                                children=[
+                                    dbc.Card(
                                     [
                                         dbc.CardHeader(
                                             dbc.Tabs(
                                                 [
                                                     dbc.Tab(label="distribution",tab_id="tab1"),
+                                                ],
+                                                id='card-tabs1',
+                                                card=True,
+                                                active_tab="tab1"
+                                            )
+                                        ),
+                                        dbc.CardBody([
+                                           dcc.Graph(id="graphs")
+
+                                        ])
+
+                                    ],style={"height":"100%","widht":"100%","margin-right":"0%","margin-top":"10px","margin-left":"0%"}
+                                )
+                                ]                           ),
+                            dbc.Col(
+                                width={"size":6},
+                                 children=[
+
+                                    dbc.Card(
+                                        [
+                                        dbc.CardHeader(
+                                            dbc.Tabs(
+                                                [
                                                     dbc.Tab(label="flunctuacion",tab_id="tab2"),
                                                     dbc.Tab(label="alpha/R",tab_id="tab3")
                                                 ],
                                                 id='card-tabs',
                                                 card=True,
-                                                active_tab="tab1"
+                                                active_tab="tab2"
                                             )
                                         ),
                                         dbc.CardBody([
@@ -543,17 +580,27 @@ layout1=html.Div([
                                                 value="linear"
 
                                             ),
-                                            dcc.Graph(id="graphs")
+                                            dcc.Graph(id="fa")
 
                                         ])
 
-                                    ],style={"margin-right":"10px"}
+                                        ],style={"height":"100%","widht":"100%","padding":"0","margin-right":"0%","margin-top":"10px","margin-left":"0%"}
                                 )
-                            ],
-                        width={"size":9}
-                            ),
-                                        ]
-                        )])
+
+                                ]
+                            )
+                        ]
+
+                        ),
+                        dbc.Row(
+                            children=[
+                                html.Br(),
+                                html.Br()
+                            ]
+                        )
+                        
+
+                        ])
 from dash.dependencies import Input,Output,State
 app.layout=layout1
 df=None
@@ -566,7 +613,7 @@ import networkx as nx
                Output("wh","value"),
               # Output("we","value"),
                Output("wm","value"),
-               Output("lenght","children")],
+               Output("l","children")],
                [Input("corpus","value"),Input("split","value"),
               Input("def","value"),Input("n_size","value")])
 def calc_window(corpus,split,defenition,n):
@@ -589,9 +636,9 @@ def calc_window(corpus,split,defenition,n):
             data=remove_punctuation(file)
             for word in data:
                 for i in word:
-                    #if i == ' ':
+                    if i == ' ':
                         #temp.append("space")
-                     #   continue
+                        continue
                     temp.append(i)
             #temp.replace(" ","space")
             data=temp
@@ -616,9 +663,14 @@ def calc_window(corpus,split,defenition,n):
         L=len(data)-n
         wm=int(L/10)
         w=int(wm/10)
-    return [w,w,wm,["Lenght: ",L]]
+    return [w,w,wm,["Lenght: "+str(L)]]
 new_ngram=None
-@app.callback([Output("table","data"),Output("chain","figure"),Output("box_tab","style"),Output("box_chain","style"),Output("alert","children"),Output("vocabulary","children"),Output("chain_time","children")],
+@app.callback([Output("table","data"),Output("chain","figure"),
+               Output("box_tab","style"),
+               Output("box_chain","style"),
+               Output("alert","children"),
+               Output("v","children"),
+               Output("t","children")],
               [Input("chain_button","n_clicks"),
                Input("dataframe","active_tab")],
               [State("corpus","value"),
@@ -644,7 +696,8 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
 
         #add alert corpus if not selected
         if corpus is None:
-            return dash.no_updata,dash.no_update,{"display":"none"},{"display":"inline"},dbc.Alert("Please choose corpus",color="danger",duration=2000,dismissable=False),dash.no_update,dash.no_update
+            return dash.no_updata,dash.no_update,{"display":"none"},{"display":"inline"},
+        dbc.Alert("Please choose corpus",color="danger",duration=2000,dismissable=False),dash.no_update,dash.no_update
 
         
        ## make markov chain graph ###
@@ -659,8 +712,8 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
             temp[ngram[0]]=ngram
   
         for node in g.nodes():
-            if node[0]=="new_word":
-                node='new_word'
+            if node[0]=="new_ngram":
+                node='new_ngram'
             for i in model[node]:
                 if i in temp:
                     g.add_edge(node,temp[i],weight=model[node][i])
@@ -761,8 +814,8 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
             #2. create newNgram
 
             new_ngram=newNgram(data,wh,L)
-            print(data[0:10])
-            print(windows)
+            #print(data[0:10])
+            #print(windows)
             #with ThreadPoolExecutor() as e:
             #    e.map(new_ngram.func,windows)
             for w in windows:
@@ -813,7 +866,7 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
             df=make_dataframe(model,L,f_min)
             for index,ngram in enumerate(df['ngram']):
                 print(str(index)+" of "+str(len(df['ngram'])),end="\r")
-                if ngram=="new_word":
+                if ngram=="new_ngram":
                     model[ngram].dt=calculate_distance(np.array(model[ngram].pos,dtype=np.uint8),L,condition)
                     continue
                 model[ngram].dt=calculate_distance(np.array(model[ngram].pos,dtype=np.uint8),L,condition)
@@ -857,7 +910,7 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
                 model[ngram].R=r
 
             if n_size>1:
-                temp_ngram.append("new_word")
+                temp_ngram.append("new_ngram")
                 df["ngram"]=temp_ngram
             df['R']=temp_R
             df['b']=temp_b 
@@ -870,33 +923,43 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
             print(df)
             
         #table.data=df.to_dict("records")
-        return [df.to_dict("record"),dash.no_update,{"display":"inline"},{"display":"none"},dash.no_update,["Vocabulary: ",V],["Time: ",round(time()-start,6)]]
+        return [df.to_dict("record"),dash.no_update,{"display":"inline"},{"display":"none"},dash.no_update,
+                ["Vocabulary: "+str(V)],["Time:"+str(round(time()-start,4))]]
+                #dash.no_update,["Vocabulary: ",V],["Time: ",round(time()-start,6)]]
 
-@app.callback(Output("graphs","figure"),
+@app.callback([Output("graphs","figure"),Output("fa","figure"),],
               [Input("dataframe","active_tab"),
                   Input("card-tabs","active_tab"),
                 Input("table","active_cell"),
                Input("table","derived_virtual_selected_rows"),
                Input("table","derived_virtual_indices"),
                Input("chain","clickData"),
-               Input("scale","value")],
-              [State("n_size","value"),State("def","value")])
-def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,scale,n,defenition):
+               Input("scale","value"),
+               Input("fa","clickData")],
+              [State("n_size","value"),
+               State("def","value"),
+               State("wh","value")])
+def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,scale,fa_click,n,defenition,wh):
     global model,df,L,g,new_ngram
     if df is None:
-        return dash.no_update
+        return dash.no_update,dash.no_update
+
     if ids is None:
-        return dash.no_update
+        return dash.no_update,dash.no_update
+
 
     df=df.reindex(pd.Index(ids))
     fig=go.Figure()
-    fig.update_layout(
-        margin=dict(l=0,r=0,t=0,b=0)
-    )
+
+    fig.update_layout(margin=dict(l=0,r=0,t=0,b=10))
+    fig1=go.Figure()
+
+    fig1.update_layout(margin=dict(l=0,r=0,t=0,b=15))
     #print(active_tab2)
     if active_tab2=="markov_chain":
         if defenition =="dynamic":
-            return dash.no_update
+            return dash.no_update,dash.no_update
+
         if clicked_data:
             nodes=np.array(g.nodes())
             #print(nodes[clicked_data['points'][0]['pointNumber']])
@@ -906,39 +969,42 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
 
                 ngram=tuple(nodes[clicked_data['points'][0]['pointNumber']])
 
-                if ngram[0]=='new_word':
-                    ngram='new_word'
+                if ngram[0]=='new_ngram':
+                    ngram='new_ngram'
 
             
-            if active_tab1=="tab1":
-
-                #ngram=nodes[clicked_data['posins'][0]['pointNumber']]
-
-
-                fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool))
-                fig.update_xaxes(type=scale)
-                return fig
             if active_tab1=="tab2":
+                fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool))
+                if fa_click:
+                    fig.add_trace(go.Bar(x=np.arange(wh,L,wh),y=model[ngram].counts[fa_click["points"][0]["x"]],name="∑∆w"))
 
-                fig.add_trace(
+                fig1.add_trace(
                         go.Scatter(x=[*model[ngram].fa.keys()],
                                          y=[*model[ngram].fa.values()],
                                          mode='markers',
                                         name="∆F"))
-                fig.add_trace(go.Scatter(
+                fig1.add_trace(go.Scatter(
                                     x=[*model[ngram].fa.keys()],
                                     y=model[ngram].temp_fa,
                                     name="fit"))
-                fig.update_xaxes(type=scale)
-                fig.update_yaxes(type=scale)
-                return fig
+                fig1.update_xaxes(type=scale)
+                fig1.update_yaxes(type=scale)
+                fig1.update_layout(hovermode="x unified")
+                #fig.update_layout(hovermode="x")
+
+                return fig,fig1
             if active_tab1=="tab3":
+                fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool))
+                if fa_click:
+                    fig.add_trace(go.Bar(x=np.arange(wh,L,wh),y=model[ngram].counts[fa_click["points"][0]["x"]],name="∑∆w"))
+
+                #fig.update_xaxes(type=scale)
 
                 hover_data=[]                
                 for data in df['ngram']:
                     hover_data.append("".join(data))
-                fig.add_trace(go.Scatter(x=df["R"],y=df["b"],mode="markers",text=hover_data))
-                fig.add_trace(go.Scatter(x=[model[ngram].R],
+                fig1.add_trace(go.Scatter(x=df["R"],y=df["b"],mode="markers",text=hover_data))
+                fig1.add_trace(go.Scatter(x=[model[ngram].R],
                                          y=[model[ngram].b],
                                          mode="markers",
                                          text=' '.join(ngram),
@@ -946,93 +1012,110 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
                                              size=20,
                                              color="red"
                                          ))) 
-                fig.update_layout(showlegend=False)
-                fig.update_yaxes(type=scale)
-                fig.update_xaxes(type=scale)
-                return fig
+                fig1.update_layout(showlegend=False)
+                fig1.update_yaxes(type=scale)
+                fig1.update_xaxes(type=scale)
+                #fig.update_layout(hovermode="x")
+                fig1.update_layout(hovermode="x unified")
+                return fig,fig1
             else:
-                return fig
+                return fig,fig1
 
 
 
 
 
-        return dash.no_update
+        return dash.no_update,dash.no_update
     else:
-        if active_tab1=="tab1":
-            if active_cell:
-                if defenition=="dynamic":
-                   # fig.add_trace(go.Scatter(x=np.arange(L),y=new_ngram.bool))
-                   # fig.update_xexec(type=scale)
-                    return dash.no_update
-
-
-                ngram=''
-                if n>1:
-                    
-                    #print(df['ngram'][0])
-                    ngram=tuple(df['ngram'][ids[active_cell['row']]].split())
-                    if ngram[0]=='new_word':
-                        ngram='new_word'
-                else:
-                    ngram=df['ngram'][ids[active_cell['row']]]
-                fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool))
-                fig.update_xaxes(type=scale)
-                return fig
-            else:
-                return fig
-            return fig
         if active_tab1=="tab2":
             if active_cell:
                 
                 if defenition =="dynamic":
-                    fig.add_trace(go.Scatter(x=[*new_ngram.dfa.keys()],y=[*new_ngram.dfa.values()],mode='markers',name="∆F"))
-                    fig.add_trace(go.Scatter(x=[*new_ngram.dfa.keys()],y=[*new_ngram.temp_dfa],name="fit=aw^b"))
-                    fig.update_xaxes(type=scale)
-                    fig.update_yaxes(type=scale)
-                    return fig
+
+                    #fig.add_trace(go.Scatter(x=np.arange(L),y=new_ngram.bool))
+                    ## add bar 
+                    if fa_click:
+                        fig.add_trace(go.Bar(x=np.arange(wh,L,wh),y=new_ngram.count[fa_click["points"][0]["x"]],name="‚àë‚àÜw"))
+
+
+
+                    fig1.add_trace(go.Scatter(x=[*new_ngram.dfa.keys()],y=[*new_ngram.dfa.values()],mode='markers',name="∆F"))
+                    fig1.add_trace(go.Scatter(x=[*new_ngram.dfa.keys()],y=[*new_ngram.temp_dfa],name="fit=aw^b"))
+                    fig1.update_xaxes(type=scale)
+                    fig1.update_yaxes(type=scale)
+                    fig1.update_layout(hovermode="x unified")
+
+                    return fig,fig1
 
                 if n>1:
                     ngram=tuple(df['ngram'][ids[active_cell['row']]].split())
-                    if ngram[0]=='new_word':
-                        ngram='new_word'
+                    if ngram[0]=='new_ngram':
+                        ngram='new_ngram'
                 else:
                     ngram=df['ngram'][ids[active_cell['row']]]
-                fig.add_trace(
+                fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool,name="positions"))
+
+                if fa_click:
+                    fig.add_trace(go.Bar(x=np.arange(wh,L,wh),y=model[ngram].counts[fa_click["points"][0]["x"]],name="∑∆w"))
+#                fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool))
+                #fig.update_xaxes(type=scale)
+
+                fig1.add_trace(
                         go.Scatter(x=[*model[ngram].fa.keys()],
                                          y=[*model[ngram].fa.values()],
                                          mode='markers',
                                         name="∆F"))
-                fig.add_trace(go.Scatter(
+                fig1.add_trace(go.Scatter(
                                     x=[*model[ngram].fa.keys()],
                                     y=model[ngram].temp_fa,
                                     name="fit=aw^b"))
-                fig.update_xaxes(type=scale)
-                fig.update_yaxes(type=scale)
-                return fig
+                fig1.update_xaxes(type=scale)
+                fig1.update_yaxes(type=scale)
+                fig1.update_layout(hovermode="x unified")
+                #fig.update_layout(hovermode="x unified")
+
+                return fig,fig1
             else:
-                return fig
+                return fig,fig1
         else:
             hover_data=[]
             if active_cell:
                 
                 if defenition =="dynamic":
-                    fig.add_trace(go.Scatter(x=new_ngram.R,y=new_ngram.b,mode='marekers',hover_data=["new_ngram"]))
-                    fig.update_xaxes(type=scale)
-                    fig.update_yaxes(type=scale)
-                    return fig
+                    print(1)
+                    #fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool))
+                    #fig.update_xaxes(type=scale)
+                    # add bar
+                    print(1)
+                    print(fa_click)
+                    if fa_click:
+                        fig.add_trace(go.Bar(x=np.arange(wh,L,wh),y=new_ngram.count[fa_click["points"][0]["x"]],name="∑∆w"))
+
+
+                    fig1.add_trace(go.Scatter(x=new_ngram.R,y=new_ngram.b,mode='marekers',hover_data=["new_ngram"]))
+                    fig1.update_xaxes(type=scale)
+                    fig1.update_yaxes(type=scale)
+                    fig1.update_layout(hovermode="x unified")
+                                
+                    return fig,fig1
 
                 if n>1:
                     ngram=tuple(df['ngram'][ids[active_cell['row']]].split())
-                    if ngram[0]=='new_word':
-                        ngram='new_word'
+                    if ngram[0]=='new_ngram':
+                        ngram='new_ngram'
                 else:
                     ngram=df['ngram'][ids[active_cell['row']]]
                 
                 for data in df['ngram']:
                     hover_data.append("".join(data))
-                fig.add_trace(go.Scatter(x=df["R"],y=df["b"],mode="markers",text=hover_data))
-                fig.add_trace(go.Scatter(x=[df['R'][active_cell['row']]],
+                fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool,name="positions"))
+                if fa_click:
+                    fig.add_trace(go.Bar(x=np.arange(wh,L,wh),y=model[ngram].counts[fa_click["points"][0]["x"]],name="∑∆w"))
+
+                #fig.update_xaxes(type=scale)
+
+                fig1.add_trace(go.Scatter(x=df["R"],y=df["b"],mode="markers",text=hover_data))
+                fig1.add_trace(go.Scatter(x=[df['R'][active_cell['row']]],
                                          y=[df["b"][active_cell['row']]],
                                          mode="markers",
                                          text=' '.join(ngram),
@@ -1040,20 +1123,29 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
                                              size=20,
                                              color="red"
                                          ))) 
-                fig.update_layout(showlegend=False)
-                fig.update_yaxes(type=scale)
-                fig.update_xaxes(type=scale)
-                return fig
+                fig1.update_layout(showlegend=False)
+                fig1.update_yaxes(type=scale)
+                fig1.update_xaxes(type=scale)
+                fig1.update_layout(hovermode="x unified")
+                #fig.update_layout(hovermode="x unified")
+
+                return fig,fig1
             else:
-                
+                fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool))
+
+                #fig.update_xaxes(type=scale)
+
                 for data in df["ngram"]:
                     hover_data.append("".join(data))
-                fig.add_trace(go.Scatter(x=df["R"],y=df["b"],mode="markers",text=hover_data))
-                fig.update_yaxes(type=scale)
-                fig.update_xaxes(type=scale)
-            return fig        
+                fig1.add_trace(go.Scatter(x=df["R"],y=df["b"],mode="markers",text=hover_data))
+                fig1.update_yaxes(type=scale)
+                fig1.update_xaxes(type=scale)
+                fig1.update_layout(hovermode="x unified")
+                #fig.update_layout(hovermode="x unified")
 
-        return dash.no_update
+            return fig,fig1
+
+        return dash.no_update,dash.no_update
 @app.callback([Output("temp_seve","children")],
               [Input("save","n_clicks")])
 def save(n):
