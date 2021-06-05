@@ -25,6 +25,17 @@ make better short
 8.chekc R  +-
 9. check what is wrong with distribution graph +
 
+
+upgrade save data button
+
+add save selected item
+
+make df like so
+
+w | ∆f | fit |
+20| 2  | 1.8 |
+...
+
 """
 
 
@@ -926,7 +937,7 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
         return [df.to_dict("record"),dash.no_update,{"display":"inline"},{"display":"none"},dash.no_update,
                 ["Vocabulary: "+str(V)],["Time:"+str(round(time()-start,4))]]
                 #dash.no_update,["Vocabulary: ",V],["Time: ",round(time()-start,6)]]
-
+clikced_ngram=None
 @app.callback([Output("graphs","figure"),Output("fa","figure"),],
               [Input("dataframe","active_tab"),
                   Input("card-tabs","active_tab"),
@@ -1073,7 +1084,7 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
                 fig1.update_yaxes(type=scale)
                 fig1.update_layout(hovermode="x unified")
                 #fig.update_layout(hovermode="x unified")
-
+                print(ngram)
                 return fig,fig1
             else:
                 return fig,fig1
@@ -1082,12 +1093,7 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
             if active_cell:
                 
                 if defenition =="dynamic":
-                    print(1)
-                    #fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool))
-                    #fig.update_xaxes(type=scale)
-                    # add bar
-                    print(1)
-                    print(fa_click)
+                    #ngram="new_ngram"
                     if fa_click:
                         fig.add_trace(go.Bar(x=np.arange(wh,L,wh),y=new_ngram.count[fa_click["points"][0]["x"]],name="∑∆w"))
 
@@ -1147,18 +1153,55 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
 
         return dash.no_update,dash.no_update
 @app.callback([Output("temp_seve","children")],
-              [Input("save","n_clicks")])
-def save(n):
+              [Input("save","n_clicks"),
+               Input("table","active_cell"),
+               Input("table","derived_virtual_indices")],
+              [State("corpus","value"),
+               State("n_size","value"),
+               State("w","value"),
+               State("wh","value"),
+               State("we","value"),
+               State("wm","value"),
+               State("f_min","value"),
+               State("condition","value"),
+               State("def","value")])
+              
+def save(n,active_cell,ids,file,n_size,w,wh,we,wm,fmin,opt,defenition):
     if n is None :
         return dash.no_update
     else:
-        #print("here")
-        global df
-        #print(df)
-        writer=pd.ExcelWriter("output.xlsx")
+        global df,model,new_ngram
+        
+        if defenition=="dynamic":
+            writer=pd.ExcelWriter("saved_data/{0} contition={7},fmin={1},n={2},w=({3},{4},{5},{6}),defenition={8}.xlsx".format(file,fmin,n_size,w,wh,we,wm,opt,defenition))
+            df.to_excel(writer)
+            writer.save()
+            if active_cell:
+                writer=pd.ExcelWriter("saved_data/"+file+" new_ngram.xlsx")
+                df1=pd.DataFrame()
+                df1["w"]=[*new_ngram.dfa.keys()]
+                df1['‚àÜF']=[*new_ngram.dfa.values()]
+                df1['fit=a*w^b']=new_ngram.temp_dfa
+                df1.to_excel(writer)
+                writer.save()
+            return dash.no_update
+
+
+
+
+
+        writer=pd.ExcelWriter("saved_data/{0} contition={7},fmin={1},n={2},w=({3},{4},{5},{6}),defenition={8}.xlsx".format(file,fmin,n_size,w,wh,we,wm,opt,defenition))
         df.to_excel(writer)
         writer.save()
-        #print("done")
+        if active_cell:
+            ngram=df['ngram'][ids[active_cell['row']]]
+            writer=pd.ExcelWriter("saved_data/"+file+" "+ngram+".xlsx")
+            df1=pd.DataFrame()
+            df1["w"]=[*model[ngram].fa.keys()]
+            df1['∆F']=[*model[ngram].fa.values()]
+            df1['fit=a*w^b']=model[ngram].temp_fa
+            df1.to_excel(writer)
+            writer.save()
     return dash.no_update
 
 
