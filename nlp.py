@@ -70,7 +70,7 @@ def remove_punctuation(data):
  
 
 
-
+model=None
 
 
 
@@ -82,6 +82,8 @@ class Ngram (dict):
         self.F_i = 0 # число унікальних ключів в розподілі
         self.fa={}
         self.counts={}
+        self.sums={}
+        self.win={}
         if iterable:
            self.update (iterable)
     def update (self, iterable): # Оновлюємо розподіл елементами з наявного итерируемого набору даних
@@ -97,7 +99,7 @@ class Ngram (dict):
     
 def make_dataframe(model,L,fmin=0):
 
-    filtred_data=list(filter(lambda x:model[x].F_i >=fmin,model))
+    filtred_data=list(filter(lambda x:len(model[x].pos) >=fmin,model))
     if 'new_ngram' not in filtred_data:
         filtred_data.append("new_ngram")
     data={"rank":np.empty(len(filtred_data)),
@@ -127,7 +129,7 @@ def make_markov_chain(data,order=1,split='word'):
 
     L=len(data)-order
     model['new_ngram']=Ngram()
-    model['new_ngram'].bool=np.zeros(L)
+    model['new_ngram'].bool=np.zeros(L,dtype=np.uint8)
     model['new_ngram'].pos=[]
     if order>1:
         for i in range(L):
@@ -142,29 +144,30 @@ def make_markov_chain(data,order=1,split='word'):
                  model[window].pos=[]
                  model[window].pos.append(i)
 
-                 model[window].bool=np.zeros(L)
+                 model[window].bool=np.zeros(L,dtype=np.uint8)
                  model[window].bool[i]=1
                  model['new_ngram'].bool[i]=1
-                 model['new_ngram'].pos.append(i)
+                 model['new_ngram'].pos.append(i+1)
 
     else:
         for i in range(L):
             if data[i] in model: # Приєднуємо до вже існуючого розподілу
                  model[data[i]].update ([data[i+order]])
-                 model[data[i]].pos.append(i)
+                 model[data[i]].pos.append(i+1)
                  model[data[i]].bool[i]=1
             else:
                  model[data[i]] = Ngram ([data[i+order]])
                  model[data[i]].pos=[]
                  model[data[i]].pos.append(i)
-                 model[data[i]].bool=np.zeros(L)
+                 model[data[i]].bool=np.zeros(L,dtype=np.uint8)
                  model[data[i]].bool[i]=1
                  model['new_ngram'].bool[i]=1
-                 model['new_ngram'].pos.append(i)
+                 model['new_ngram'].pos.append(i+1)
     V=len(model)
 
 
-
+from numba import types
+from numba.typed import Dict
 #@jit(nopython=True)
 def calculate_distance(positions,L,option):
     if option=="no":
@@ -175,30 +178,30 @@ def calculate_distance(positions,L,option):
         return pbc(positions,L)
 
 
-@jit(nopython=True)
+#@jit(nopython=True)
 def nbc(positions):
     number_of_pos=len(positions)
     if number_of_pos ==1:
         return positions
-    dt=np.empty(number_of_pos-1,dtype=np.uint8)
+    dt=np.empty(number_of_pos-1)
     for i in range(number_of_pos-1):
-        dt[i]=positions[i+1]-positions[i]
+        dt[i]=(positions[i+1]-positions[i])-1
     return dt
 
-@jit(nopython=True)
+#@jit(nopython=True)
 def obc(positions,L):
     number_of_pos=len(positions)
-    dt=np.empty(number_of_pos+1,dtype=np.uint8)
+    dt=np.empty(number_of_pos+1)
     dt[0]=positions[0]
     for i in range(number_of_pos-1):
         dt[i+1]=positions[i+1]-positions[i]
     dt[-1]=L-positions[-1]
     return dt
 
-@jit(nopython=True)
+#@jit(nopython=True)
 def pbc(positions,L):
     number_of_pos=len(positions)
-    dt=np.empty(number_of_pos,dtype=np.uint8)
+    dt=np.empty(number_of_pos)
     for i in range(number_of_pos-1):
         dt[i]=positions[i+1]-positions[i]
     dt[-1]=L-positions[-1]+L+positions[0]
@@ -217,20 +220,30 @@ def mse(x):
     st=np.mean(x**2)
     return np.sqrt(st-(t**2))
 
-@jit(nopython=True)
+#@jit(nopython=True)
 def R(x):
     if len(x)==1:
-        return 0.0
-    t=np.mean(x)
-    ts=np.mean(x**2)
-    return np.sqrt(ts-(t**2))/t
-@jit(nopython=True)
-def fa(x,args):
-    wi,wsh,l=args
-    count=np.empty(len(range(wi,l,wsh)),dtype=np.uint8)
+        return 0
+    avg=np.mean(x)
+    avgs=np.mean(x**2)
+    skv=np.sqrt(avgs-(avg**2))
+    return skv/avg
+#@jit(nopython=True)
+def make_windows(x,args):
+    wi,l,wsh=args
+#    count=np.empty(len(range(0,l-wi,wsh)))#,dtype=np.uint8)
+    count={}
+   # di=dict()
     for index,i in enumerate(range(0,l-wi,wsh)):
-        count[index]=s(x[i:i+wi])
-    return count,mse(count)
+        count[i]=x[i:i+wi]        #di[i+wi]=[x[i:i+wi]]
+    return count
+def calc_sum(x):
+    sums=np.empty(len(x))
+    for i,w in enumerate(x):
+        sums[i]=np.sum(w)
+    return sums
+    
+
 @jit(nopython=True)
 def fit(x,a,b):
     return a*x**b
@@ -357,19 +370,16 @@ layout1=html.Div([
                                 dbc.CardHeader("Configuration:"),
                                 dbc.CardBody(
                                 [
-
                                     html.Label("Choose file:"),
                                     html.Div(
                                         [
                                     dcc.Dropdown(id="corpus",options=[{"label":i,"value":i}for i in corpuses]),
-                                    
                                     dbc.InputGroup(
                                         [
                                             dbc.InputGroupAddon("Size of ngram", addon_type="prepend"),
                                             dbc.Input(id="n_size",type="number",value=1),
                                         ],size="md",className="config"
                                     ),
-                                    
                                     dbc.InputGroup(
                                         [
                                             dbc.InputGroupAddon("Split by", addon_type="prepend"),
@@ -379,7 +389,7 @@ layout1=html.Div([
                                                     {"label":"symbol","value":"symbol"},
                                                     {"label":"word","value":"word"},
                                                     {"label":"letter","value":"letter"}
-                                                    
+                                                   
                                                 ],
                                                 value="word"
                                             )
@@ -447,20 +457,12 @@ layout1=html.Div([
                                                 ],
                                                 value="static"
                                             ),
-                                            dbc.InputGroupAddon("Defenition", addon_type="append")
+                                            dbc.InputGroupAddon("Definition", addon_type="append")
                                         ],size="md",className="window"
                                     ),
 
-                                    
-
-                                    #dbc.Input(placeholder="size of ngram",type="number"),
-                                    #html.H6("Size of ngram:"),
-                                    #dcc.Slider(id="n_size",min=1,max=9,value=1,marks={i:"{}".format(i)for i in range(1,10)}),
-                                    #html.H6("Split by:"),
-                                    #dcc.RadioItems(id='split',options=[{"label":"symbol","value":"symbol"},{"label":"word","value":"word"}],value="word"),
-                                    #html.H6("Boundary Condition:"),
-                                    #dcc.RadioItems(id='condition',options=[{"label":"no","value":"no"},{"label":"periodic","value":"periodic"},{"label":"ordinary","value":"ordinary"}],value="words"),
-                                    html.Br(),
+                                
+                                   html.Br(),
                                             dbc.Button("Analyze", id="chain_button",color="primary",block=True),
                                             
                                             dbc.Button("Save data",id="save",color="danger",block=True),
@@ -568,13 +570,13 @@ layout1=html.Div([
                                 width={"size":6},
                                  children=[
 
-                                    dbc.Card(
+                                     dbc.Card(
                                         [
                                         dbc.CardHeader(
                                             dbc.Tabs(
                                                 [
-                                                    dbc.Tab(label="flunctuacion",tab_id="tab2"),
-                                                    dbc.Tab(label="alpha/R",tab_id="tab3")
+                                                    dbc.Tab(label="flunctuation",tab_id="tab2"),
+                                                    dbc.Tab(label="b/R",tab_id="tab3")
                                                 ],
                                                 id='card-tabs',
                                                 card=True,
@@ -700,6 +702,9 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
     
     global data,L,V,model,ngram,df,g,new_ngram
     if dataframe=="markov_chain":
+        if model is None:
+            
+            return dash.no_update,dash.no_update,{"display":"none"},{"display":'inline'},dash.no_update,dash.no_update,dash.no_update
 
         if n is None:
             
@@ -710,7 +715,8 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
             return dash.no_updata,dash.no_update,{"display":"none"},{"display":"inline"},
         dbc.Alert("Please choose corpus",color="danger",duration=2000,dismissable=False),dash.no_update,dash.no_update
 
-        
+        if new_ngram is not None:
+            return 
        ## make markov chain graph ###
         g=nx.MultiGraph()
         temp={}
@@ -834,10 +840,15 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
             #calculate coefs
             temp_v=[]
             temp_pos=[]
+            temp_bool=np.zeros(len(data))
             for i,ngram in enumerate(data):
                 if ngram not in temp_v:
                     temp_v.append(ngram)
                     temp_pos.append(i)
+                    temp_bool[i]=1
+
+            new_ngram.bool=temp_bool
+            new_ngram.pos=temp_pos
             new_ngram.dt=calculate_distance(np.array(temp_pos,dtype=np.uint8),L,condition)
             new_ngram.R=round(R(new_ngram.dt),7)
             c,cov=curve_fit(fit,[*new_ngram.dfa.keys()],[*new_ngram.dfa.values()],method='lm',maxfev=5000)
@@ -871,6 +882,10 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
             
         
         else:
+            #:print(model)
+            if model is not None:
+                return [df.to_dict("record"),dash.no_update,{"display":"inline"},{"display":"none"},
+                        dash.no_update,dash.no_update,dash.no_update]
             ###  MAKE MARKOV CHAIN ####
             start=time()
             make_markov_chain(data,order=n_size,split=split)
@@ -878,18 +893,38 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
             for index,ngram in enumerate(df['ngram']):
                 print(str(index)+" of "+str(len(df['ngram'])),end="\r")
                 if ngram=="new_ngram":
-                    model[ngram].dt=calculate_distance(np.array(model[ngram].pos,dtype=np.uint8),L,condition)
+                    model[ngram].dt=calculate_distance(model[ngram].pos,L,condition)
                     continue
-                model[ngram].dt=calculate_distance(np.array(model[ngram].pos,dtype=np.uint8),L,condition)
+                model[ngram].dt=calculate_distance(model[ngram].pos,L,condition)
             windows=list(range(w,wm,we))
-            fa(np.zeros(5),(1,3,4))
+            #fa(np.zeros(5),(1,3,4))
+            #print(w,wm,we)
+            #print(windows)
             def func(wind):
-                model[ngram].counts[wind],model[ngram].fa[wind]=fa(model[ngram].bool,(wind,wh,L))
+                wiwi=make_windows(model[ngram].bool,(wind,L,wh))
+                sumas=calc_sum(wiwi.values())
+                ffa=mse(sumas)
+                return (wind,wiwi,sumas,ffa)
+            #model[ngram].sums[wind],model[ngram].counts[wind],model[ngram].fa[wind]=fa(model[ngram].bool,(wind,L,wh))
             for index,ngram in enumerate(df['ngram']):
                 print(str(index)+" of "+str(len(df['ngram'])),end="\r")
+
                 with ThreadPoolExecutor() as e:
-                    e.map(func,windows)
-            #calculate_fa(df,model,w,wh,we,wm,L,condition)
+                    results=e.map(func,windows)
+                for result in results:
+                    #print(ngram,result[0],result[3])
+                    model[ngram].win[result[0]]=result[1]
+                    model[ngram].counts[result[0]]=result[2]
+                    model[ngram].fa[result[0]]=result[3]
+
+
+                        
+                      # for i,ngram in enumerate(df["ngram"]):
+           #     print(str(i)+"of"+str(len(df['ngram'])),end="\r")
+            #    for wind in windows:
+            #        func(wind)
+            print("done calculation")
+            #calculate_fa(df,model,w,wh,w,wm,L,condition)
             ###
             temp_b=[]
 
@@ -902,12 +937,16 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
             
             for ngram in df['ngram']:
                 model[ngram].temp_fa=[]
-                c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],method='lm',maxfev=5000)
+                ff=[*model[ngram].fa.values()]
+                ww=[*model[ngram].fa.keys()]
+                                
+               
+                c,cov=curve_fit(fit,ww,ff,method='lm',maxfev=5000)
                 model[ngram].a=c[0]
                 model[ngram].b=c[1]
-                for w in model[ngram].fa.keys():
+                for w in ww:
                     model[ngram].temp_fa.append(fit(w,model[ngram].a,model[ngram].b))
-                temp_error.append(round(r2_score([*model[ngram].fa.values()],model[ngram].temp_fa),5))
+                temp_error.append(round(r2_score(ff,model[ngram].temp_fa),5))
                 temp_b.append(round(c[1],7))
                 temp_a.append(round(c[0],7))
 
@@ -916,7 +955,7 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
 
                     temp_ngram.append(" ".join(ngram))
                 #print(np.array(model[ngram].dt))
-                r=round(R(np.array(model[ngram].dt)),7)
+                r=round(R(model[ngram].dt),7)
                 temp_R.append(r)
                 model[ngram].R=r
 
@@ -931,13 +970,22 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
             df=df.sort_values(by="ƒ",ascending=False)
             df['rank']=range(1,len(temp_R)+1)
             df=df.set_index(pd.Index(np.arange(len(df))))
-            print(df)
+            #print(df)
             
         #table.data=df.to_dict("records")
         return [df.to_dict("record"),dash.no_update,{"display":"inline"},{"display":"none"},dash.no_update,
                 ["Vocabulary: "+str(V)],["Time:"+str(round(time()-start,4))]]
                 #dash.no_update,["Vocabulary: ",V],["Time: ",round(time()-start,6)]]
 clikced_ngram=None
+#@app.callback([Output("temp_seve","children")],
+#              [Input("graphs","clickData")])
+#def check_dist(clicked_data):
+ #   if clicked_data:
+ #       fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool))
+  #      if fa_click:
+   #     fig.add_trace(go.Bar(x=np.arange(wh,L,wh),y=model[ngram].counts[fa_click["points"][0]["x"]],name="‚àë‚àÜw"))
+
+ #   return dash.no_update
 @app.callback([Output("graphs","figure"),Output("fa","figure"),],
               [Input("dataframe","active_tab"),
                   Input("card-tabs","active_tab"),
@@ -946,11 +994,12 @@ clikced_ngram=None
                Input("table","derived_virtual_indices"),
                Input("chain","clickData"),
                Input("scale","value"),
-               Input("fa","clickData")],
+               Input("fa","clickData"),
+               Input("graphs","clickData"),
+               Input("wh","value")],
               [State("n_size","value"),
-               State("def","value"),
-               State("wh","value")])
-def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,scale,fa_click,n,defenition,wh):
+               State("def","value"),])
+def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,scale,fa_click,graph_click,wh,n,defenition):
     global model,df,L,g,new_ngram
     if df is None:
         return dash.no_update,dash.no_update
@@ -970,25 +1019,19 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
     if active_tab2=="markov_chain":
         if defenition =="dynamic":
             return dash.no_update,dash.no_update
-
         if clicked_data:
             nodes=np.array(g.nodes())
             #print(nodes[clicked_data['points'][0]['pointNumber']])
             ngram=nodes[clicked_data['points'][0]['pointNumber']]
             if n>1:
-                
-
                 ngram=tuple(nodes[clicked_data['points'][0]['pointNumber']])
-
                 if ngram[0]=='new_ngram':
                     ngram='new_ngram'
-
-            
             if active_tab1=="tab2":
                 fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool))
                 if fa_click:
                     fig.add_trace(go.Bar(x=np.arange(wh,L,wh),y=model[ngram].counts[fa_click["points"][0]["x"]],name="∑∆w"))
-
+                fa_click=None
                 fig1.add_trace(
                         go.Scatter(x=[*model[ngram].fa.keys()],
                                          y=[*model[ngram].fa.values()],
@@ -1008,6 +1051,8 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
                 fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool))
                 if fa_click:
                     fig.add_trace(go.Bar(x=np.arange(wh,L,wh),y=model[ngram].counts[fa_click["points"][0]["x"]],name="∑∆w"))
+                    print(model[ngram].sums[fa_click['points'][0]['x']])
+                fa_click=None
 
                 #fig.update_xaxes(type=scale)
 
@@ -1042,12 +1087,12 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
             if active_cell:
                 
                 if defenition =="dynamic":
-
-                    #fig.add_trace(go.Scatter(x=np.arange(L),y=new_ngram.bool))
-                    ## add bar 
+                    fig.add_trace(go.Scatter(x=np.arange(L),y=new_ngram.bool))
+                    
                     if fa_click:
-                        fig.add_trace(go.Bar(x=np.arange(wh,L,wh),y=new_ngram.count[fa_click["points"][0]["x"]],name="‚àë‚àÜw"))
-
+                        #print(new_ngram)
+                        fig.add_trace(go.Bar(x=np.arange(wh,L,wh),
+                                             y=new_ngram.count[fa_click["points"][0]["x"]],name="∑∆w"))
 
 
                     fig1.add_trace(go.Scatter(x=[*new_ngram.dfa.keys()],y=[*new_ngram.dfa.values()],mode='markers',name="∆F"))
@@ -1055,7 +1100,7 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
                     fig1.update_xaxes(type=scale)
                     fig1.update_yaxes(type=scale)
                     fig1.update_layout(hovermode="x unified")
-
+                    print(1)
                     return fig,fig1
 
                 if n>1:
@@ -1065,26 +1110,37 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
                 else:
                     ngram=df['ngram'][ids[active_cell['row']]]
                 fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool,name="positions"))
-
+                print(ngram)
                 if fa_click:
-                    fig.add_trace(go.Bar(x=np.arange(wh,L,wh),y=model[ngram].counts[fa_click["points"][0]["x"]],name="∑∆w"))
+                    ww=fa_click['points'][0]["x"]
+                    fig.add_trace(go.Bar(x=np.arange(0,L,wh),y=model[ngram].counts[ww],name="∑∆w"))
+                if graph_click:
+                    www=graph_click['points'][0]['x']
+                graph_click=None
+                fa_click=None
+
+
 #                fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool))
                 #fig.update_xaxes(type=scale)
-
+                temp_ww=[*model[ngram].fa.keys()]
+                #print(temp_ww)
+                #print(model[ngram].temp_fa)
                 fig1.add_trace(
-                        go.Scatter(x=[*model[ngram].fa.keys()],
+                        go.Scatter(x=temp_ww,
                                          y=[*model[ngram].fa.values()],
                                          mode='markers',
                                         name="∆F"))
+                #print()
                 fig1.add_trace(go.Scatter(
-                                    x=[*model[ngram].fa.keys()],
+                                    x=temp_ww,
                                     y=model[ngram].temp_fa,
                                     name="fit=aw^b"))
                 fig1.update_xaxes(type=scale)
                 fig1.update_yaxes(type=scale)
+                fig.update_layout(showlegend=False)
                 fig1.update_layout(hovermode="x unified")
                 #fig.update_layout(hovermode="x unified")
-                print(ngram)
+                
                 return fig,fig1
             else:
                 return fig,fig1
@@ -1094,14 +1150,16 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
                 
                 if defenition =="dynamic":
                     #ngram="new_ngram"
+                    fig.add_trace(go.Scatter(x=np.arange(L),y=new_ngram.bool))
                     if fa_click:
-                        fig.add_trace(go.Bar(x=np.arange(wh,L,wh),y=new_ngram.count[fa_click["points"][0]["x"]],name="∑∆w"))
+                        fig.add_trace(go.Bar(x=np.arange(0,L,wh),y=new_ngram.count[fa_click["points"][0]["x"]],name="∑∆w"))
 
 
-                    fig1.add_trace(go.Scatter(x=new_ngram.R,y=new_ngram.b,mode='marekers',hover_data=["new_ngram"]))
+                    fig1.add_trace(go.Scatter(x=[new_ngram.R],y=[new_ngram.b],mode='markers',
+                                              ))
                     fig1.update_xaxes(type=scale)
                     fig1.update_yaxes(type=scale)
-                    fig1.update_layout(hovermode="x unified")
+                    #fig1.update_layout(hovermode="x unified")
                                 
                     return fig,fig1
 
@@ -1111,12 +1169,21 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
                         ngram='new_ngram'
                 else:
                     ngram=df['ngram'][ids[active_cell['row']]]
-                
+                print(ngram)
                 for data in df['ngram']:
                     hover_data.append("".join(data))
                 fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool,name="positions"))
                 if fa_click:
-                    fig.add_trace(go.Bar(x=np.arange(wh,L,wh),y=model[ngram].counts[fa_click["points"][0]["x"]],name="∑∆w"))
+                    ww=fa_click['points'][0]["x"]
+                    fig.add_trace(go.Bar(x=np.arange(ww,L,wh),y=model[ngram].counts[ww],name="∑∆w"))
+
+                fa_click=None
+                if graph_click:
+                    pass
+                    #print(model[ngram].sums.keys())
+                    #print(model[ngram].sums[graph_click['points'][0]['x']])
+                graph_click=None
+
 
                 #fig.update_xaxes(type=scale)
 
@@ -1132,12 +1199,12 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
                 fig1.update_layout(showlegend=False)
                 fig1.update_yaxes(type=scale)
                 fig1.update_xaxes(type=scale)
-                fig1.update_layout(hovermode="x unified")
+                #fig1.update_layout(hovermode="x unified")
                 #fig.update_layout(hovermode="x unified")
 
                 return fig,fig1
             else:
-                fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool))
+                #fig.add_trace(go.Scatter(x=np.arange(L),y=model[ngram].bool))
 
                 #fig.update_xaxes(type=scale)
 
@@ -1146,7 +1213,7 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
                 fig1.add_trace(go.Scatter(x=df["R"],y=df["b"],mode="markers",text=hover_data))
                 fig1.update_yaxes(type=scale)
                 fig1.update_xaxes(type=scale)
-                fig1.update_layout(hovermode="x unified")
+                #fig1.update_layout(hovermode="x unified")
                 #fig.update_layout(hovermode="x unified")
 
             return fig,fig1
@@ -1207,7 +1274,7 @@ def save(n,active_cell,ids,file,n_size,w,wh,we,wm,fmin,opt,defenition):
 
 import webbrowser
 if __name__=="__main__":
-    webbrowser.open("http://127.0.0.1:8050/")
+    #webbrowser.open("http://127.0.0.1:8050/")
 
     app.run_server(debug=True)
 
@@ -1215,259 +1282,6 @@ if __name__=="__main__":
     #main()
 
 
-
-
-
-"""
-                                        html.Div(children=[dbc.Spinner(dt.DataTable(id='table',
-                                                columns=[{"name":i,"id":i}for i in ['rank',"ngram","ƒ","R","a","b","goodness"]],
-                                                style_data={'whiteSpace': 'auto','height': 'auto'},
-                                                editable=False,
-                                                filter_action="native",
-                                                sort_action="native",
-                                                page_size=10,
-                                                fixed_rows={'headers': True},
-                                                style_cell={'whiteSpace': 'normal',
-                                                             'height': 'auto',
-                                                            'textAlign': 'right',
-                                                             "fontSize":15,
-                                                            "font-family":"sans-serif"},#'minWidth': 40, 'width': 95, 'maxWidth': 95},
-                                            style_table={'height': 450, 'overflowY': 'auto',"overflowX":"none"}
-                                                  ))],  style={"display","none"}),
-                                                html.Div(children=[
-                                                    dbc.Spinner(
-                                                    dcc.Graph(id='chain'))],
-                                                                      id="box_chain",
-                                                                      style={"display":'none'})
-"""
-
-
-
-
-
-
-"""
-def secound_pool(ngram):
-    return fa(model[ngram].bool,(temp_w,wmax,we,wh,L))
-
-def first_pool(wind):
-    #print(w)
-    #print(list(df['ngram']))
-    #print(model['entropy'])
-    global temp_w
-    temp_w=wind
-    with ThreadPoolExecutor() as j:
-        result = j.map(secound_pool,df['ngram'])
-    for f,ngram in zip(result,df['ngram']):
-        model[ngram].counts[wind]=f[0]
-        model[ngram].fa[wind]=f[1]
-
-
-with ThreadPoolExecutor() as e:
-    windows=list(range(w,wmax,we))
-    e.map(first_pool,windows)
-"""
-"""
-def calculate_fa(df,model,*args):
-    fa(np.array([1,2],dtype=np.uint8),(1,2,3))
-    w,wmax,we,wh,L,opt=args
-    def func(window):
-        dt=calculate_distance(np.array(model[ngram].pos,dtype=np.uint8),L,opt)
-        model[ngram].counts[window],model[ngram].fa[window]=fa(dt,(window,wh,L))
-    for index,ngram in enumerate(df['ngram']):
-        print(str(index)+" of "+str(len(df['ngram'])),end="\r")
-        with ThreadPoolExecutor() as e:
-            wi=list(range(w,wmax,we))
-            e.map(func,wi)
-
-
-    pass
-"""
-#print("fa time:",time()-start)
-#print(df)
-#L,V=0,0
-##wh=0
-#model=0
-#ngram=0
-#@profile
-#def main():
-#    global L,V,wh,model,ngram
-#    with open("corpus/lotr_en.txt") as f:
-#        file=f.read()
-#    data=remove_punctuation(file)
-#    start=time()
-#    fmin=4
-#    order=1
-#    split="word"
-#    option="obc"
-#    make_markov_chain(data.split(),order=order,split=split)
-#
-#    #model
-#    df=make_dataframe(model,fmin)
-#    print("chain time:",time()-start)
-#    #print(df)
-#
-#    ### CALCULATE FA ###
-#
-#    print("order:",order)
-#    print("split by:",split)
-#    print("L:",L)
-#    print("V: ",V)
-#    print("fmin:",fmin)
-#    print("valid V:",len(df['ngram']))
-#    print()
-#    wmax=int(L/20)
-#    w=int(wmax/10)
-#    we=int(wmax/10)
-#    wh=w
-#    print("w:",w)
-#    print("wmax:",wmax)
-#    print("we:",we)
-#    print("wh:",wh)
-#    print("option:",option)
-#    #model['entropy'].bool
-#
-#
-#
-#    start=time()
-#    temp_w=0
-##    g()
-# #   input()
-#
-#    calculate_fa(df,model,w,wmax,we,wh,L,option)
-#    temp_b=[]
-#    temp_fi=[]
-#    temp_R=[]
-##    print(df)
-#    print()
-#    print("fa time:",time()-start)
-#    #for ngram in model:
-#        #print(model[ngram].fa)
-#
-#
-#
-#    for ngram in df['ngram']:
-#        c,cov=curve_fit(fit,[*model[ngram].fa.keys()],[*model[ngram].fa.values()],maxfev=5000)
-#        model[ngram].a=c[0]
-#        model[ngram].b=c[1]
-#        temp_b.append(c[1])
-#        temp_fi.append(model[ngram].F_i/L)
-#        temp_R.append(R(np.array(model[ngram].pos)))
-#    df['R']=temp_R
-#    df['f_i']=temp_fi
-#    df['alpha']=temp_b
-#    print(df)
-#
-#
-#
-#    pass
-#
-
-
-
-
-
-#@app.callback([Output("table","data")],
-#              [Input("wh","value")])
-#def add_fa_analyze(wh):
-#    return dash.no_update
-    #return df,dash.no_update
-#app.layout=html.Div(style={"backgroundColor":colors["background"]},
-#                    children=[html.Div(style={"backgroundColor":colors["text"],
-#                                                "widht":"20%",
-#                                              "float":"left",
-#                                              "text-align":"center",
-#                                              "padding":"1%"},
-#                              children=[
-#                                        html.Div(children=[html.Label("Choose corpus"),
-#                                        dcc.Dropdown(
-#                                            id="corpus",
-#                                            options=[{"label":i,"value":i} for i in corpus],
-#                                        )],style={"width":"90%",
-#                                                  "margin-right":"5%",
-#                                                  "margin-left":"5%"}),
-#                                        html.Div(children=[
-#                                        html.Label("size of ngram"),
-#                                        dcc.Slider(
-#                                            id="n-size",
-#                                            min=1,
-#                                            max=7,
-#                                            marks={i:"{}".format(i)for i in range(1,8)},
-#                                            value=1)],style={"width":"80%",
-#                                                             "margin-left":"10%",
-#                                                             "margin-right":"10%"}),
-#                                        html.Div(children=[
-#                                        html.Label("split by"),
-#                                        dcc.Dropdown(
-#                                            id="split",
-#                                            options=[{"label":i,"value":i} for i in ["word","symbol"]],
-#                                            value="word")],style={"width":"60%",
-#                                                                  "margin-left":"20%",
-#                                                                  "margin-right":"20%"}),
-#                                        html.Div(children=[
-#                                         html.Label("Boundary Condition"),
-#                                        dcc.Dropdown(
-#                                            id="options",
-#                                            options=[{"label":i,"value":i} for i in ["no","periodic","ordinary"]],
-#                                            value="no")],style={"width":"60%",
-#                                                                "margin-left":"20%",
-#                                                                "margin-right":"20%"}),
-#                                        html.Div(children=[
-#                                        html.Label("freauency of ngram"),
-#                                        dcc.Input(
-#                                            id="fmin",
-#                                            style={"padding":"5%","width":"50%"},
-#                                            placeholder="filter",
-#                                            type='number',
-#                                            debounce=True,
-#                                            value="")],style={"width":'60%',
-#                                                            "margin-left":"19%",
-#                                                             "margin-right":"19%"})
-#
-#                                        ]),
-#                              html.Div(style={"float":"right","width":"75%"},
-#                                       children=[dt.DataTable(
-#                                       id='table',
-#                                           columns=[{"name":i,"id":i}for i in ["ngram","F_i","f_i","R","alpha"]],
-#                                       data=[])])])
-#from dash.dependencies import Input,Output,State
-#@app.callback(Output("table","data"),
-#              [Input("corpus","value"),
-#               Input("n-size","value"),
-#               Input("split","value"),
-#               Input("options","value"),
-#               Input("fmin","value")])
-#def update_table(corpus,n_size,split,options,fmin):
-#    print(corpus)
-#    print(n_size)
-#    print(split)
-#    print(options)
-#    print(fmin)
-#    if corpus is None:
-#        pass
-#    else:
-#
-    #global L,V,wh,model,ngram
-    #with open("corpus/"+corpus) as f:
-    #    file=f.read()
-    #return [{"name":i,"id":i}for i in ["ngram","fmin"]]
-    #data=remove_punctuation(file)
-    #start=time()
-    #fmin=4
-    #order=1
-    #split="word"
-    #option="obc"
-    #make_markov_chain(data.split(),order=n_size,split=split)
-    #print()
-    #model
-    #df=make_dataframe(model,int(fmin))
-    #return [{"name":i,"id":i}for i in df.columns]
-
-    #print("chain time:",time()-start)
-    #print(df)
-    #return df.to_dict(),[{"name":i,"id":i}for i in df.columns]
-    ### CALCULATE FA ###
- #       pass
 
 
 
