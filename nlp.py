@@ -36,6 +36,10 @@ w | ∆f | fit |
 20| 2  | 1.8 |
 ...
 
+
+
+
+check skv and mean on mac and windows!
 """
 
 
@@ -183,7 +187,7 @@ def nbc(positions):
     number_of_pos=len(positions)
     if number_of_pos ==1:
         return positions
-    dt=np.empty(number_of_pos-1)
+    dt=np.empty(number_of_pos-1,dtype=np.dtype(int))
     for i in range(number_of_pos-1):
         dt[i]=(positions[i+1]-positions[i])-1
     return dt
@@ -191,20 +195,20 @@ def nbc(positions):
 #@jit(nopython=True)
 def obc(positions,L):
     number_of_pos=len(positions)
-    dt=np.empty(number_of_pos+1)
-    dt[0]=positions[0]
+    dt=np.empty(number_of_pos+1,dtype=np.dtype(int))
+    dt[0]=positions[0]-1
     for i in range(number_of_pos-1):
-        dt[i+1]=positions[i+1]-positions[i]
-    dt[-1]=L-positions[-1]
+        dt[i+1]=positions[i+1]-positions[i]-1
+    dt[-1]=L-positions[-1]-1
     return dt
 
 #@jit(nopython=True)
 def pbc(positions,L):
     number_of_pos=len(positions)
-    dt=np.empty(number_of_pos)
+    dt=np.empty(number_of_pos,dtype=np.dtype(int))
     for i in range(number_of_pos-1):
-        dt[i]=positions[i+1]-positions[i]
-    dt[-1]=L-positions[-1]+L+positions[0]
+        dt[i]=positions[i+1]-positions[i]-1
+    dt[-1]=L-positions[-1]+positions[0]-1
     return dt
 
 #print(df["ngram"])
@@ -224,6 +228,7 @@ def mse(x):
 def R(x):
     if len(x)==1:
         return 0
+
     avg=np.mean(x)
     avgs=np.mean(x**2)
     skv=np.sqrt(avgs-(avg**2))
@@ -243,7 +248,7 @@ def calc_sum(x):
         sums[i]=np.sum(w)
     return sums
     
-
+temp_n=0
 @jit(nopython=True)
 def fit(x,a,b):
     return a*x**b
@@ -319,7 +324,7 @@ def prepere_data(data,n,split):
 #@jit(nopython=True)
 def dfa(data,args):
     wi,wh,l=args
-    count=np.empty(len(range(wi,l,wh)),dtype=np.uint8)
+    count=np.empty(len(range(wi,l,wh)),dtype=np.int)
     for index,i in enumerate(range(0,l-wi,wh)):
         temp_v=[]
         x=[]
@@ -329,8 +334,11 @@ def dfa(data,args):
             else:
                 temp_v.append(ngram)
                 x.append(1)
-        count[index]=s(np.array(x,dtype=np.uint8))
-        return count,mse(count)
+    
+        count[index]=np.sum(x)
+        
+        
+    return count,mse(count)
 class newNgram():
     def __init__(self,data,wh,l):
         self.data=data
@@ -358,7 +366,8 @@ colors={
 
 import dash_bootstrap_components as dbc
 layout2=html.Div()
-
+import logging
+logging.getLogger("werkzeug").setLevel(logging.ERROR)
 # old layout was fun but not what i wanted
 #
 layout1=html.Div([
@@ -536,7 +545,7 @@ layout1=html.Div([
 
                                      ]
                                              )
-                                ],style={"padding":"0","margin-right":"0px","margin-top":"10px","height":"650px"}),
+                                ],style={"padding":"0","margin-bot":"10px","margin-right":"0px","margin-top":"10px","height":"98%"}),
                             ],
                     width={"size":9,"padding":0}
                             ),
@@ -575,7 +584,7 @@ layout1=html.Div([
                                         dbc.CardHeader(
                                             dbc.Tabs(
                                                 [
-                                                    dbc.Tab(label="flunctuation",tab_id="tab2"),
+                                                    dbc.Tab(label="fluctuation",tab_id="tab2"),
                                                     dbc.Tab(label="b/R",tab_id="tab3")
                                                 ],
                                                 id='card-tabs',
@@ -703,20 +712,19 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
     global data,L,V,model,ngram,df,g,new_ngram
     if dataframe=="markov_chain":
         if model is None:
+           # print(1)
             
             return dash.no_update,dash.no_update,{"display":"none"},{"display":'inline'},dash.no_update,dash.no_update,dash.no_update
 
         if n is None:
-            
+            #print(2)
             return dash.no_update,dash.no_update,{"display":"none"},{"display":'inline'},dash.no_update,dash.no_update,dash.no_update
 
         #add alert corpus if not selected
         if corpus is None:
             return dash.no_updata,dash.no_update,{"display":"none"},{"display":"inline"},
         dbc.Alert("Please choose corpus",color="danger",duration=2000,dismissable=False),dash.no_update,dash.no_update
-
-        if new_ngram is not None:
-            return 
+        
        ## make markov chain graph ###
         g=nx.MultiGraph()
         temp={}
@@ -837,6 +845,7 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
             #    e.map(new_ngram.func,windows)
             for w in windows:
                 new_ngram.func(w)
+                print(new_ngram.dfa[w])
             #calculate coefs
             temp_v=[]
             temp_pos=[]
@@ -849,7 +858,7 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
 
             new_ngram.bool=temp_bool
             new_ngram.pos=temp_pos
-            new_ngram.dt=calculate_distance(np.array(temp_pos,dtype=np.uint8),L,condition)
+            new_ngram.dt=calculate_distance(np.array(temp_pos),L,condition)
             new_ngram.R=round(R(new_ngram.dt),7)
             c,cov=curve_fit(fit,[*new_ngram.dfa.keys()],[*new_ngram.dfa.values()],method='lm',maxfev=5000)
             new_ngram.a=round(c[0],7)
@@ -882,20 +891,42 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
             
         
         else:
+            global temp_n
             #:print(model)
             if model is not None:
-                return [df.to_dict("record"),dash.no_update,{"display":"inline"},{"display":"none"},
+                if temp_n <n:
+                    temp_n=n
+                    pass
+                else:
+                    return [df.to_dict("records"),dash.no_update,{"display":"inline"},{"display":"none"},
                         dash.no_update,dash.no_update,dash.no_update]
             ###  MAKE MARKOV CHAIN ####
             start=time()
             make_markov_chain(data,order=n_size,split=split)
             df=make_dataframe(model,L,f_min)
+
+            """
+
+
+            check positions and dt
+            for fuck sake
+
+            """
             for index,ngram in enumerate(df['ngram']):
                 print(str(index)+" of "+str(len(df['ngram'])),end="\r")
                 if ngram=="new_ngram":
                     model[ngram].dt=calculate_distance(model[ngram].pos,L,condition)
                     continue
                 model[ngram].dt=calculate_distance(model[ngram].pos,L,condition)
+
+            print(model["faramir"].pos)
+            print(model['faramir'].dt)
+            print(model['faramir'].dt**2)
+            p=np.mean(model['faramir'].dt)
+            p1=np.mean(model['faramir'].dt**2)
+            print("avg:", p)
+            print("avgs: ",p1)
+            print("svk:",np.sqrt(p1-p**2))
             windows=list(range(w,wm,we))
             #fa(np.zeros(5),(1,3,4))
             #print(w,wm,we)
@@ -973,7 +1004,7 @@ def update_table(n,dataframe,corpus,n_size,split,condition,f_min,w,wh,we,wm,defe
             #print(df)
             
         #table.data=df.to_dict("records")
-        return [df.to_dict("record"),dash.no_update,{"display":"inline"},{"display":"none"},dash.no_update,
+        return [df.to_dict("records"),dash.no_update,{"display":"inline"},{"display":"none"},dash.no_update,
                 ["Vocabulary: "+str(V)],["Time:"+str(round(time()-start,4))]]
                 #dash.no_update,["Vocabulary: ",V],["Time: ",round(time()-start,6)]]
 clikced_ngram=None
@@ -1137,7 +1168,7 @@ def tab_content(active_tab2,active_tab1,active_cell,row_ids,ids,clicked_data,sca
                                     name="fit=aw^b"))
                 fig1.update_xaxes(type=scale)
                 fig1.update_yaxes(type=scale)
-                fig.update_layout(showlegend=False)
+                #fig.update_layout(showlegend=False)
                 fig1.update_layout(hovermode="x unified")
                 #fig.update_layout(hovermode="x unified")
                 
@@ -1274,7 +1305,7 @@ def save(n,active_cell,ids,file,n_size,w,wh,we,wm,fmin,opt,defenition):
 
 import webbrowser
 if __name__=="__main__":
-    #webbrowser.open("http://127.0.0.1:8050/")
+    webbrowser.open("http://127.0.0.1:8050/")
 
     app.run_server(debug=True)
 
